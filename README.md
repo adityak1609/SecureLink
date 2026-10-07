@@ -11,6 +11,40 @@ This is a banking-style transaction simulation, not a payment system or a claim 
 
 ## Start here
 
+### Graphical application (recommended for presentation)
+
+Double-click **Launch SecureLink.cmd** to open the application in your browser, without a terminal window. On a fresh clone, first double-click **Setup SecureLink.cmd** to install dependencies. Python must already be installed.
+
+The GUI includes a transfer workspace, device connection view, text composer, file picker and drag-and-drop, acknowledged chunk progress, persistent transfer history, resumable uploads, verified receiving, image/text previews, playable audio/video, audit verification, and PCAP-to-SQLite/XML exports. All transfers use the existing authenticated AES-GCM backend; no security results are mocked.
+
+1. Click **Start local demo**. The GUI starts the server and audit witness as separate hidden processes, on automatically selected ports, and authenticates the client.
+2. Send your own file/text, or use the four sample buttons. Supported formats are TXT, PNG/JPG, WAV/MP3 and MP4, up to 32 MiB.
+3. Choose **Receive** to retrieve the server's copy through the encrypted channel and verify its SHA-256. Then use **Preview** or **Save**.
+4. Open **Security & audit**, click **Verify audit chain**, and show the witness checkpoint and recorded events.
+5. Open **Traffic analysis**, analyze the current captured stream, and export PCAP, SQLite, XML or JSON for the report.
+6. Use **Disconnect devices** to stop the simulated services, or the power icon in the sidebar to close the application. Closing only the browser tab leaves the local application running; launching again reopens that instance.
+
+The GUI provisions its own random keys under excluded `runtime/gui/credentials/` and retains transfers in `runtime/gui/`. It does not overwrite CLI keys or existing CLI state. Restarting the local demo retains its server transfers and history. If a transfer fails, **Resume** reuses its original request ID. The interface displays controls separately from verification results; an audit is marked verified only after its head and count match the live authenticated witness.
+
+For a remote server, choose **Connect a device** and enter its host and port. Provision matching client/server device credentials as described in [the GUI guide](docs/GUI.md). The browser UI is restricted to `127.0.0.1`; device communication can use a lab LAN. The same-host browser-to-Python interface uses local HTTP with an unguessable API token, origin checks and host validation. AES-GCM protects the client-to-server TCP leg. This local academic UI is not an internet-hosted web service.
+
+Alternative launch:
+
+```powershell
+.\.venv\Scripts\python app.py
+```
+
+GUI backend checks are included in `pytest tests`. Optional real-browser acceptance checks use installed Chrome:
+
+```powershell
+.\.venv\Scripts\python -m pip install -r requirements-dev.txt
+.\.venv\Scripts\python tests/browser_smoke.py
+```
+
+The browser check uses isolated local state and exercises all four media previews, real encrypted round trips, file-picker/text uploads, saved downloads, audit verification, exports and a 390-pixel viewport. Screenshots and its summary stay under excluded `runtime/browser_qa/`.
+
+### Command-line evaluation tools
+
 Tested with Python 3.14.3 on Windows 11. Use the project virtual environment:
 
 ```powershell
@@ -136,7 +170,7 @@ Npcap is not installed on the development machine. Stream evidence and network-p
 
 - [Revised synopsis](docs/SYNOPSIS.html)
 - [Evaluation report](docs/EVALUATION.html)
-- `results/security_tests.xml`: automated regression results (47 tests).
+- `results/security_tests.xml`: automated backend and GUI regression results (see the report for the latest count).
 - `results/demo_v3/demo_results.json`: secured/plaintext comparison and lost-ACK recovery.
 - `results/two_process_v3/results.json`: separate-process topology and verified transfers.
 - `results/benchmark_v3/measurements.csv`: 240 observations, 30 per mode/media combination.
@@ -149,7 +183,7 @@ Measurements include hashing, actual transfer, disk persistence and audit acknow
 
 ## Project layout
 
-`securelink/protocol.py` implements authentication, session derivation and framing; `client.py` and `server.py` implement transfers; `storage.py` owns durable idempotency; `audit.py` implements logs/checkpoints; `service.py` provides bounded TCP workers; `capture.py` and `analysis.py` implement traffic evidence; `benchmarks.py` evaluates actual transfers. Root scripts provide runnable CLI entry points. Tests are isolated in `tests/`.
+`frontend/` contains the responsive browser UI; `app.py` and `securelink/gui.py` launch and operate the local graphical application. `securelink/protocol.py` implements authentication, session derivation and framing; `client.py` and `server.py` implement transfers; `storage.py` owns durable idempotency; `audit.py` implements logs/checkpoints; `service.py` provides bounded TCP workers; `capture.py` and `analysis.py` implement traffic evidence; `benchmarks.py` evaluates actual transfers. Root scripts also provide CLI evaluation tools. Tests are isolated in `tests/`.
 
 ## References
 

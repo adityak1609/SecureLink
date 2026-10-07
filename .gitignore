@@ -18,6 +18,7 @@ tools/WiresharkExtract/
 /benchmark_results.csv
 /results/*
 !/results/security_tests.xml
+!/results/gui_browser_summary.json
 
 # Retain the measured academic evidence used by the reports.
 !/results/benchmark_v3/

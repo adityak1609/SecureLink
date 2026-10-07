@@ -82,7 +82,7 @@ class Client:
                 self.retries += 1
                 time.sleep(min(2.0,self.retry_delay*2**attempt)+random.uniform(0,.02))
 
-    def upload(self, path, request=None):
+    def upload(self, path, request=None, progress=None):
         path = Path(path)
         request = request or uuid.uuid4().hex
         TransferStore.check_request(request)
@@ -93,6 +93,8 @@ class Client:
             offset = status['offset']
             if type(offset) is not int or not 0<=offset<=meta['size']:
                 raise ProtocolError('Invalid resume offset')
+            if progress:
+                progress(offset, meta['size'])
             if status['complete']:
                 return self.call('finish', request=request)
             with path.open('rb') as stream:
@@ -105,13 +107,15 @@ class Client:
                     if result['offset'] != offset + len(data):
                         raise ProtocolError('Incorrect chunk acknowledgement')
                     offset = result['offset']
+                    if progress:
+                        progress(offset, meta['size'])
             result = self.call('finish', request=request)
             if not result['complete'] or result['metadata'] != meta:
                 raise ProtocolError('Incorrect completion acknowledgement')
             return result
         return self._retry(attempt)
 
-    def download(self, request, destination):
+    def download(self, request, destination, progress=None):
         TransferStore.check_request(request)
         destination = Path(destination)
         destination.parent.mkdir(parents=True, exist_ok=True)
@@ -125,6 +129,8 @@ class Client:
             offset = partial.stat().st_size if partial.exists() else 0
             if offset > meta['size']:
                 raise ProtocolError('Partial download exceeds expected length')
+            if progress:
+                progress(offset, meta['size'])
             with partial.open('ab') as stream:
                 while offset < meta['size']:
                     data = self.call('read', request=request, offset=offset)
@@ -133,6 +139,8 @@ class Client:
                     stream.write(data)
                     stream.flush()
                     offset += len(data)
+                    if progress:
+                        progress(offset, meta['size'])
                 os.fsync(stream.fileno())
             if file_hash(partial) != meta['sha256']:
                 raise ProtocolError('Downloaded file hash mismatch')
