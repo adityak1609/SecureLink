@@ -1,0 +1,1 @@
+{"action": "transfer", "source": "DEMO_A", "destination": "DEMO_B", "amount_paise": 12500}

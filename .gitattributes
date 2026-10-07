@@ -1,0 +1,17 @@
+* text=auto
+*.py text eol=lf
+*.md text eol=lf
+*.html text eol=lf
+*.json text eol=lf
+*.xml text eol=lf
+*.csv text eol=lf
+*.txt text eol=lf
+*.ini text eol=lf
+*.lua text eol=lf
+*.png binary
+*.jpg binary
+*.wav binary
+*.mp3 binary
+*.mp4 binary
+*.pcap binary
+*.sqlite binary

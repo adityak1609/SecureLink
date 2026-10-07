@@ -1,0 +1,122 @@
+{
+  "environment": {
+    "python": "3.14.3",
+    "platform": "Windows-11-10.0.22631-SP0",
+    "cpu_count": 20
+  },
+  "method": "Cold connection per transfer; full upload through durable receiver ACK; one discarded warmup per mode/file; alternating order; identical chunking and audit policy.",
+  "limits": [
+    "Client, server and witness share one process and machine: CPU/RSS are aggregate, not per-device.",
+    "Windows process CPU time may be quantized; a zero measurement is below timer resolution, not zero computational work.",
+    "RSS sampled every 2ms; very short peaks may be missed.",
+    "Protocol byte count includes client-server handshake and application frames, excludes TCP/IP and separate witness traffic.",
+    "Baseline disables client-server authentication/encryption only, and is restricted to loopback.",
+    "Timing includes local hashing, disk persistence and audit anchoring; no claim of cryptography-only latency."
+  ],
+  "summary": [
+    {
+      "file": "audio.wav",
+      "mode": "plaintext",
+      "n": 30,
+      "median_latency_ms": 93.02425000350922,
+      "p95_latency_ms": 124.85449999803677,
+      "median_goodput_mib_s": 0.6566168080175536,
+      "median_cpu_ms": 0.0,
+      "peak_rss_mib": 29.29296875,
+      "median_handshake_ms": 0.005950016202405095,
+      "median_client_protocol_bytes": 65285.0,
+      "success_rate": 1.0
+    },
+    {
+      "file": "audio.wav",
+      "mode": "secure",
+      "n": 30,
+      "median_latency_ms": 109.89184999198187,
+      "p95_latency_ms": 139.28689999738708,
+      "median_goodput_mib_s": 0.5558238636385102,
+      "median_cpu_ms": 0.0,
+      "peak_rss_mib": 29.29296875,
+      "median_handshake_ms": 1.1383499950170517,
+      "median_client_protocol_bytes": 66145.0,
+      "success_rate": 1.0
+    },
+    {
+      "file": "identity.png",
+      "mode": "plaintext",
+      "n": 30,
+      "median_latency_ms": 80.79194999299943,
+      "p95_latency_ms": 107.8267999982927,
+      "median_goodput_mib_s": 0.04449837472335351,
+      "median_cpu_ms": 0.0,
+      "peak_rss_mib": 29.06640625,
+      "median_handshake_ms": 0.004750007065013051,
+      "median_client_protocol_bytes": 5012.0,
+      "success_rate": 1.0
+    },
+    {
+      "file": "identity.png",
+      "mode": "secure",
+      "n": 30,
+      "median_latency_ms": 70.53860000451095,
+      "p95_latency_ms": 124.19209998915903,
+      "median_goodput_mib_s": 0.05093926068674614,
+      "median_cpu_ms": 0.0,
+      "peak_rss_mib": 29.06640625,
+      "median_handshake_ms": 0.7285999890882522,
+      "median_client_protocol_bytes": 5872.0,
+      "success_rate": 1.0
+    },
+    {
+      "file": "transaction.txt",
+      "mode": "plaintext",
+      "n": 30,
+      "median_latency_ms": 75.64710000588093,
+      "p95_latency_ms": 109.79099999531172,
+      "median_goodput_mib_s": 0.0011346970379359593,
+      "median_cpu_ms": 0.0,
+      "peak_rss_mib": 28.9375,
+      "median_handshake_ms": 0.0035999983083456755,
+      "median_client_protocol_bytes": 1331.0,
+      "success_rate": 1.0
+    },
+    {
+      "file": "transaction.txt",
+      "mode": "secure",
+      "n": 30,
+      "median_latency_ms": 87.52845000708476,
+      "p95_latency_ms": 110.8273999998346,
+      "median_goodput_mib_s": 0.0009806294395550254,
+      "median_cpu_ms": 0.0,
+      "peak_rss_mib": 28.9375,
+      "median_handshake_ms": 1.0194500064244494,
+      "median_client_protocol_bytes": 2191.0,
+      "success_rate": 1.0
+    },
+    {
+      "file": "video.mp4",
+      "mode": "plaintext",
+      "n": 30,
+      "median_latency_ms": 123.70115000521764,
+      "p95_latency_ms": 154.26119999028742,
+      "median_goodput_mib_s": 2.1828431881978143,
+      "median_cpu_ms": 0.0,
+      "peak_rss_mib": 29.40625,
+      "median_handshake_ms": 0.0037999998312443495,
+      "median_client_protocol_bytes": 285393.0,
+      "success_rate": 1.0
+    },
+    {
+      "file": "video.mp4",
+      "mode": "secure",
+      "n": 30,
+      "median_latency_ms": 109.38040001201443,
+      "p95_latency_ms": 154.98389999265783,
+      "median_goodput_mib_s": 2.4686084276734133,
+      "median_cpu_ms": 7.8125,
+      "peak_rss_mib": 29.40625,
+      "median_handshake_ms": 0.8235999848693609,
+      "median_client_protocol_bytes": 286789.0,
+      "success_rate": 1.0
+    }
+  ]
+}

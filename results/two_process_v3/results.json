@@ -1,0 +1,58 @@
+{
+  "topology": "Three separate processes on one Windows host over loopback; not separate physical devices",
+  "client_pid": 25548,
+  "bank_pid": 25952,
+  "witness_pid": 27420,
+  "bank_address": [
+    "127.0.0.1",
+    63294
+  ],
+  "witness_address": [
+    "127.0.0.1",
+    63290
+  ],
+  "transfers": [
+    {
+      "name": "transaction.txt",
+      "request": "32a32e94792045909d302238274ecae4",
+      "sha256": "60f80e0d7248a50fb4da74e6ee5a4786491980934a80732bb86f52017060f729",
+      "verified": true,
+      "bytes": 90
+    },
+    {
+      "name": "identity.png",
+      "request": "034246d5d7bf4bd7986279c2d3d791ba",
+      "sha256": "7ec366af9412f0a2b750bb71795cfb6e8b08ef9baf9f40477cb7202985c300e9",
+      "verified": true,
+      "bytes": 3767
+    },
+    {
+      "name": "audio.wav",
+      "request": "87a57a277e3f4c718c79aafd872a8409",
+      "sha256": "3f806962fcdcc982acaca0e5180c701391a59c2635d82e4b0660dc148c01f528",
+      "verified": true,
+      "bytes": 64044
+    },
+    {
+      "name": "video.mp4",
+      "request": "0cdec00438d243fb8b46884955592649",
+      "sha256": "86fbe2b205b3936fcf2c460b826dfe37f298b4c6f495194af690cf0edee17b8c",
+      "verified": true,
+      "bytes": 283133
+    }
+  ],
+  "audit_records": 17,
+  "audit_head": "6be863a33274634a5c070cc83710d9e85ecf3397a87d24fa2e778acf30134488",
+  "capture": {
+    "source": "D:\\IS_Project\\results\\two_process_v3\\session_stream.pcap",
+    "backend": "stream",
+    "records": 76,
+    "captured_bytes": 718751,
+    "payload_bytes": 718371,
+    "marker_found": false,
+    "retransmissions": null,
+    "interpretation": "Entropy is descriptive, not proof of encryption. USER0 captures contain socket bytes, not TCP packets.",
+    "duration_seconds": 0.3413701057434082,
+    "weighted_record_entropy": 7.95614218971177
+  }
+}

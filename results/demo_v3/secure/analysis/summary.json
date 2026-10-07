@@ -1,0 +1,12 @@
+{
+  "source": "results\\demo_v3\\secure\\session_stream.pcap",
+  "backend": "stream",
+  "records": 76,
+  "captured_bytes": 718751,
+  "payload_bytes": 718371,
+  "marker_found": false,
+  "retransmissions": null,
+  "interpretation": "Entropy is descriptive, not proof of encryption. USER0 captures contain socket bytes, not TCP packets.",
+  "duration_seconds": 0.4808650016784668,
+  "weighted_record_entropy": 7.955587810996548
+}

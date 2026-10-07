@@ -1,0 +1,116 @@
+{
+  "topology": "Separate TCP endpoints on IPv4 loopback in one process; shared CPU and memory",
+  "capture_type": "Actual socket stream bytes in USER0 PCAP; no IP/TCP headers",
+  "modes": {
+    "secure": {
+      "transfers": [
+        {
+          "file": "transaction.txt",
+          "request": "ae4003eb53e545119a0f1cf2dcae018e",
+          "bytes": 90,
+          "sha256": "60f80e0d7248a50fb4da74e6ee5a4786491980934a80732bb86f52017060f729",
+          "roundtrip_verified": true,
+          "decoded": true
+        },
+        {
+          "file": "identity.png",
+          "request": "2600556426a04ed88ecf7759179fefdb",
+          "bytes": 3767,
+          "sha256": "7ec366af9412f0a2b750bb71795cfb6e8b08ef9baf9f40477cb7202985c300e9",
+          "roundtrip_verified": true,
+          "decoded": true
+        },
+        {
+          "file": "audio.wav",
+          "request": "5d742eb1015349688f260928d601bf3b",
+          "bytes": 64044,
+          "sha256": "3f806962fcdcc982acaca0e5180c701391a59c2635d82e4b0660dc148c01f528",
+          "roundtrip_verified": true,
+          "decoded": true
+        },
+        {
+          "file": "video.mp4",
+          "request": "221e1cc4c90544019e16f6c69326b312",
+          "bytes": 283133,
+          "sha256": "86fbe2b205b3936fcf2c460b826dfe37f298b4c6f495194af690cf0edee17b8c",
+          "roundtrip_verified": true,
+          "decoded": true
+        }
+      ],
+      "audit_records": 17,
+      "audit_head": "442d6c2b5838306e0c1d0d3a43227c749f1a9d6213f01b515b835e9c76535e72",
+      "capture": {
+        "source": "results\\demo_v3\\secure\\session_stream.pcap",
+        "backend": "stream",
+        "records": 76,
+        "captured_bytes": 718751,
+        "payload_bytes": 718371,
+        "marker_found": false,
+        "retransmissions": null,
+        "interpretation": "Entropy is descriptive, not proof of encryption. USER0 captures contain socket bytes, not TCP packets.",
+        "duration_seconds": 0.4808650016784668,
+        "weighted_record_entropy": 7.955587810996548
+      },
+      "pyshark_verified_records": 76
+    },
+    "plaintext": {
+      "transfers": [
+        {
+          "file": "transaction.txt",
+          "request": "c385509bfb4745c8b703526b527456f6",
+          "bytes": 90,
+          "sha256": "60f80e0d7248a50fb4da74e6ee5a4786491980934a80732bb86f52017060f729",
+          "roundtrip_verified": true,
+          "decoded": true
+        },
+        {
+          "file": "identity.png",
+          "request": "9810422a1c9f46169ccc4d6739018c6d",
+          "bytes": 3767,
+          "sha256": "7ec366af9412f0a2b750bb71795cfb6e8b08ef9baf9f40477cb7202985c300e9",
+          "roundtrip_verified": true,
+          "decoded": true
+        },
+        {
+          "file": "audio.wav",
+          "request": "5424d4415e5b4e9ca302b76705e3b119",
+          "bytes": 64044,
+          "sha256": "3f806962fcdcc982acaca0e5180c701391a59c2635d82e4b0660dc148c01f528",
+          "roundtrip_verified": true,
+          "decoded": true
+        },
+        {
+          "file": "video.mp4",
+          "request": "8eba70709b844db0953667a96c264cad",
+          "bytes": 283133,
+          "sha256": "86fbe2b205b3936fcf2c460b826dfe37f298b4c6f495194af690cf0edee17b8c",
+          "roundtrip_verified": true,
+          "decoded": true
+        }
+      ],
+      "audit_records": 17,
+      "audit_head": "15b25d77ed034b819afd0b5f4059efe3077dd48c2305b580679a55ca32cb2e60",
+      "capture": {
+        "source": "results\\demo_v3\\plaintext\\session_stream.pcap",
+        "backend": "stream",
+        "records": 72,
+        "captured_bytes": 713985,
+        "payload_bytes": 713625,
+        "marker_found": true,
+        "retransmissions": null,
+        "interpretation": "Entropy is descriptive, not proof of encryption. USER0 captures contain socket bytes, not TCP packets.",
+        "duration_seconds": 0.4079270362854004,
+        "weighted_record_entropy": 7.764017230805161
+      },
+      "pyshark_verified_records": 72
+    }
+  },
+  "recovery": {
+    "injected_failure": "Connection closed after durable commit before ACK",
+    "retries": 1,
+    "recovery_ms": 237.29540000203997,
+    "ledger_entries": 1,
+    "completed": true,
+    "audit_records": 11
+  }
+}

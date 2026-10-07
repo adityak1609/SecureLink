@@ -1,0 +1,38 @@
+[
+  {
+    "name": "audio.mp3",
+    "size": 6488,
+    "sha256": "213c2dd7834585184616545d818979f2f18a6c6a6826e835029fa0fb1ad65a3c",
+    "validated": true
+  },
+  {
+    "name": "audio.wav",
+    "size": 64044,
+    "sha256": "3f806962fcdcc982acaca0e5180c701391a59c2635d82e4b0660dc148c01f528",
+    "validated": true
+  },
+  {
+    "name": "identity.jpg",
+    "size": 13751,
+    "sha256": "cfd1c5ffb3e7d6e7f3085222518355dd11355d7b5fcfe6c1049998663174b174",
+    "validated": true
+  },
+  {
+    "name": "identity.png",
+    "size": 3767,
+    "sha256": "7ec366af9412f0a2b750bb71795cfb6e8b08ef9baf9f40477cb7202985c300e9",
+    "validated": true
+  },
+  {
+    "name": "transaction.txt",
+    "size": 90,
+    "sha256": "60f80e0d7248a50fb4da74e6ee5a4786491980934a80732bb86f52017060f729",
+    "validated": true
+  },
+  {
+    "name": "video.mp4",
+    "size": 283133,
+    "sha256": "86fbe2b205b3936fcf2c460b826dfe37f298b4c6f495194af690cf0edee17b8c",
+    "validated": true
+  }
+]
