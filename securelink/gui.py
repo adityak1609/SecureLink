@@ -30,6 +30,7 @@ from .client import Client
 from .credentials import load, provision, provision_signatures
 from .settings import ROOT, MAX_FILE, EXTENSIONS
 from .storage import metadata_for, validate_metadata, validate_content
+from .image_metrics import image_metrics
 
 
 def now():
@@ -108,7 +109,7 @@ class Application:
         address = address or self.target
         if not address:
             raise ValueError('Start the local demo or connect a device first')
-        return Client(tuple(address), self.config['device'], bytes.fromhex(self.config['secret']), self.config['server'],signing_key=self.signing_key)
+        return Client(tuple(address), self.config['device'], bytes.fromhex(self.config['secret']), self.config['server'],signing_key=self.signing_key,collect_evidence=True)
 
     def spawn(self, script, arguments, name):
         ready = self.root / (name + '.ready.json')
@@ -237,6 +238,10 @@ class Application:
                           'source': str(source.relative_to(self.root)), 'status': 'sending', 'downloaded': False}
                 self.history.insert(0, record)
             record.update(status='sending', error=None)
+            record['upload_started']=now()
+            self.transfer_log(record,'upload_started','running')
+            if meta['media']=='image':
+                record['image_metrics']=image_metrics(source)
             self.save()
         started = time.perf_counter()
         try:
@@ -244,9 +249,11 @@ class Application:
                 result = client.upload(source, request, progress=self.progress(job))
             with self.lock:
                 record.update(status='complete', elapsed_ms=round((time.perf_counter() - started)*1000, 2),
-                              retries=client.retries, wire_bytes=client.sent_bytes + client.received_bytes)
+                              retries=client.retries, wire_bytes=client.sent_bytes + client.received_bytes,
+                              upload_completed=now())
                 record['signature']=client.last_signature
                 record.setdefault('crypto',{})['upload']=self.crypto_result(client,'upload')
+                self.transfer_log(record,'upload_completed','ok','Server acknowledged transfer; pinned-key signature verified.')
                 self.connected = True
                 self.audit_result = None
                 self.save()
@@ -254,6 +261,7 @@ class Application:
         except Exception as exc:
             with self.lock:
                 record.update(status='failed', error=str(exc)[:300])
+                self.transfer_log(record,'upload_failed','failed',str(exc)[:300])
                 self.save()
             raise
 
@@ -267,12 +275,26 @@ class Application:
     def download(self, request, job):
         row = self.record(request)
         destination = self.root / 'downloads' / request / row['name']
-        with self.client() as client:
-            client.download(request, destination, progress=self.progress(job))
+        with self.lock:
+            row['download_started']=now()
+            self.transfer_log(row,'download_started','running')
+            self.save()
+        try:
+            with self.client() as client:
+                client.download(request, destination, progress=self.progress(job))
+        except Exception as exc:
+            with self.lock:
+                self.transfer_log(row,'download_failed','failed',str(exc)[:300])
+                self.save()
+            raise
         with self.lock:
             row['downloaded'] = True
             row['download_verified'] = now()
             row.setdefault('crypto',{})['download']=self.crypto_result(client,'download')
+            row['received_sha256']=client.verified_hash
+            if row['media']=='image':
+                row['image_metrics']=image_metrics(self.root/row['source'],destination)
+            self.transfer_log(row,'download_verified','ok','Full SHA-256 and Ed25519 checks passed; received copy available.')
             self.connected = True
             self.audit_result = None
             self.save()
@@ -285,7 +307,36 @@ class Application:
         return {'client':client.metrics.snapshot(),'server':client.server_metrics,
                 'signature_verified':bool(client.last_signature and verification.get('calls',0)>0 and verification.get('failures',0)==0), 'algorithm':'Ed25519' if client.last_signature else None,
                 'handshake_ms':client.handshake_ms,'direction':direction,
+                'ciphertext_samples':list(client.ciphertext_samples),
                 'scope':'Client operation includes retries. Server metrics cover its final connection up to response encoding; final acknowledgement encryption is excluded. Hashing includes file reads.'}
+
+    @staticmethod
+    def transfer_log(row,event,outcome,detail=''):
+        timestamp=now()
+        row.setdefault('logs',[]).append({'timestamp':timestamp,'event':event,'outcome':outcome,'details':detail})
+        row['logs']=row['logs'][-100:]
+        row['updated_at']=timestamp
+
+    def transfer_evidence(self,request):
+        with self.lock:
+            row=json.loads(json.dumps(self.record(request)))
+            row.pop('source',None)
+            events=[]
+            if self.mode=='local' and (self.root/'audit.jsonl').exists():
+                with (self.root/'audit.jsonl').open(encoding='utf-8') as stream:
+                    for line in stream:
+                        try:
+                            events.append(json.loads(line))
+                        except ValueError:
+                            pass  # Concurrent append can have an incomplete final line.
+            matches=[entry for entry in events if entry.get('request')==request and entry.get('device')==self.config['device']]
+            sessions={entry.get('session') for entry in matches}
+            correlated=[entry for entry in events if entry in matches or
+                        (entry.get('event')=='authentication' and entry.get('session') in sessions and entry.get('device')==self.config['device'])]
+            return {'transfer':row,'client_events':row.get('logs',[]),'server_events':correlated,
+                    'server_log_scope':'Matching request and session events from the local server audit log.' if self.mode=='local' else 'Remote server logs must be collected on the remote host.',
+                    'timestamp_scope':'ISO 8601 UTC wall-clock observations; not trusted timestamp certificates or signed manifest fields.',
+                    'generated_at':now()}
 
     def retry(self, request, job):
         row = self.record(request)
@@ -493,6 +544,13 @@ class Handler(BaseHTTPRequestHandler):
                 body=app.metrics_export(format)
                 self.headers_for(200,'text/csv' if format=='csv' else 'application/json',len(body),'crypto_metrics.'+format)
                 self.wfile.write(body)
+            elif parsed.path.startswith('/api/evidence/'):
+                request=parsed.path.rsplit('/',1)[-1]
+                self.respond(app.transfer_evidence(request))
+            elif parsed.path=='/api/logs/audit.jsonl':
+                if app.mode!='local':
+                    raise ValueError('Server audit export is available in local demo mode')
+                self.file(app.root/'audit.jsonl',attachment=True)
             elif parsed.path=='/api/tests/export/json':
                 if app.test_result is None:
                     raise ValueError('Run the tests first')

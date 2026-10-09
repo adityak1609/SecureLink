@@ -93,6 +93,32 @@ def run():
             assert 'signature_verification' in (output/'crypto_metrics.csv').read_text()
             page.screenshot(path=str(output/'performance.png'),full_page=True)
 
+            page.locator('.nav-item[data-view="evidence"]').click()
+            image_request=page.evaluate('state.transfers.find(row => row.name === "identity.png").request')
+            page.locator('#evidence-file').select_option(image_request)
+            page.wait_for_function('(request) => evidenceRecord?.transfer.request === request',arg=image_request)
+            evidence_text=page.locator('#evidence-content').inner_text()
+            for label in ('UTC timestamps','Original and received SHA-256 values match.',
+                          'Actual ciphertext prefix','AES-GCM tag','Nonce (12 bytes)',
+                          'Mean squared error','Infinity (identical pixels)',
+                          'transfer_complete','download_verified','signature_verified'):
+                assert label in evidence_text,label
+            assert page.evaluate('evidenceRecord.transfer.image_metrics.mse')==0
+            with page.expect_download() as download_info:
+                page.locator('#export-evidence').click()
+            download_info.value.save_as(str(output/'transfer_evidence.json'))
+            saved_evidence=json.loads((output/'transfer_evidence.json').read_text())
+            assert saved_evidence['transfer']['received_sha256']==saved_evidence['transfer']['sha256']
+            with page.expect_download() as download_info:
+                page.locator('#export-audit').click()
+            download_info.value.save_as(str(output/'server_audit.jsonl'))
+            assert 'signature_verified' in (output/'server_audit.jsonl').read_text()
+            page.screenshot(path=str(output/'evidence.png'),full_page=True)
+            page.set_viewport_size({'width':390,'height':844})
+            assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'),'Evidence page overflows on mobile'
+            page.screenshot(path=str(output/'evidence_mobile.png'),full_page=True)
+            page.set_viewport_size({'width':1440,'height':1100})
+
             page.locator('.nav-item[data-view="security"]').click()
             operation('#verify-audit')
             assert 'checkpoint match' in page.locator('#audit-summary').inner_text()
@@ -140,7 +166,10 @@ def run():
                    'responsive_width': 390, 'audit_verified': True, 'pcap_exports': True,
                    'analysis_engine':'PyShark + Wireshark/TShark','digital_signature':'Ed25519',
                    'crypto_timings_displayed':True,'gui_test_suite':{'passed':report['passed'],'failed':report['failed'],'skipped':report['skipped'],
-                   'requirements_complete':report['requirements_complete']}}
+                   'requirements_complete':report['requirements_complete']},
+                   'transfer_evidence_displayed':True,'actual_ciphertext_displayed':True,
+                   'utc_logs_exported':True,'image_mse':saved_evidence['transfer']['image_metrics']['mse'],
+                   'source_received_hashes_match':True}
         (output / 'summary.json').write_text(json.dumps(summary, indent=2))
         print(json.dumps({'output': str(output), **summary}, indent=2))
     finally:

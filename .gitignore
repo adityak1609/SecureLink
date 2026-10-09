@@ -21,6 +21,9 @@ tools/WiresharkExtract/
 !/results/gui_browser_summary.json
 !/results/gui_crypto_metrics.csv
 !/results/gui_test_results.json
+!/results/gui_transfer_evidence.json
+!/results/gui_server_audit.jsonl
+!/results/gui_transfer_evidence.png
 
 # Retain the measured academic evidence used by the reports.
 !/results/benchmark_v3/

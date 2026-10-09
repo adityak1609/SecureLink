@@ -14,6 +14,8 @@ This plan maps the supplied ISL requirements to implemented tests. It is a proje
 | Multimedia / GUI | Upload and receive text, PNG/JPEG, WAV/MP3 and MP4; preview/play in browser | Original and received bytes match; supported media decodes |
 | ISL traffic / PCAP module | Decode real USER0 captures with PyShark/TShark; export SQLite/XML | Matching observation counts and decoded directions/payloads; no Python decoder fallback |
 | Efficiency | Measure actual crypto calls per file/direction and end-to-end transfer tests | Real durations/counts/bytes; explicit measurement scope and exported observations |
+| Transfer evidence | Compare recorded ciphertext with real transmitted/verified AES-GCM records; inspect UTC activity/audit events and both file hashes | Actual bounded samples, valid tag/nonce/header, per-request logs, matching independently computed hashes; no secret keys exposed |
+| Image fidelity | Compare identical and deliberately changed decoded image pixels | Correct dimensions/size, MSE 0 and infinite PSNR for identical pixels; finite PSNR and nonzero MSE after a change; bounded decoding |
 | Browser interface access | Missing API token, foreign origin/host, unsafe filename/path | Request rejected and credentials remain private |
 
 ## Run through the GUI

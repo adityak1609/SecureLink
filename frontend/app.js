@@ -12,7 +12,7 @@ async function api(path, options = {}) { const response = await fetch(path, {...
 async function action(path, body = {}) { if (pending) return; pending = true; updateButtons(); try { await api(path, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)}); await refresh(); } catch (error) { toast(error.message, true); } finally { pending = false; updateButtons(); } }
 function busy() { return pending || !!state?.jobs.some(job => ['queued','running'].includes(job.status)); }
 function updateButtons() { const locked = busy(), connected = !!state?.connected; $('#start-demo').disabled = locked; $('#start-demo').innerHTML = state?.mode === 'local' && connected ? 'Restart local demo <span>↻</span>' : 'Start local demo <span>→</span>'; $('#remote-button').disabled = locked; $('#disconnect').disabled = locked || state?.mode === 'offline'; $('#send-button').disabled = locked || !connected || (composer === 'files' ? !selectedFile : !$('#message').value.trim()); $$('[data-sample]').forEach(button => button.disabled = locked || !connected); $('#verify-audit').disabled = locked || !connected || state?.mode !== 'local'; $('#analyze').disabled = locked || !connected || state?.mode !== 'local'; $$('[data-export]').forEach(button => button.disabled = !state?.exports.includes(button.dataset.export)); $$('[data-receive], [data-retry]').forEach(button => button.disabled = locked || !connected); $('#shutdown').disabled = locked; $('#run-tests').disabled = locked; $$('[data-test-export]').forEach(button => button.disabled = !state?.tests); const openButton=$('#open-wireshark'); if(openButton) openButton.disabled=locked || !state?.wireshark_available; }
-function switchView(view) { const titles = {workspace:'Transfers',security:'Security & audit',traffic:'Traffic analysis',guide:'Project guide',performance:'Crypto performance',testing:'Testing & results'}; if (!(view in titles)) return; $$('.view').forEach(section => section.hidden = section.id !== `${view}-view`); $$('.nav-item').forEach(button => button.classList.toggle('active', button.dataset.view === view)); $('#breadcrumb').textContent = titles[view]; }
+function switchView(view) { const titles = {workspace:'Transfers',security:'Security & audit',traffic:'Traffic analysis',guide:'Project guide',performance:'Crypto performance',evidence:'Transfer evidence',testing:'Testing & results'}; if (!(view in titles)) return; $$('.view').forEach(section => section.hidden = section.id !== `${view}-view`); $$('.nav-item').forEach(button => button.classList.toggle('active', button.dataset.view === view)); $('#breadcrumb').textContent = titles[view]; if(view === 'evidence') renderEvidenceSelector(); }
 $$('[data-view]').forEach(button => button.addEventListener('click', event => { event.preventDefault(); switchView(button.dataset.view); }));
 $$('[data-composer]').forEach(button => button.addEventListener('click', () => { composer = button.dataset.composer; $$('[data-composer]').forEach(tab => { tab.classList.toggle('active', tab === button); tab.setAttribute('aria-selected', String(tab === button)); }); $('#files-composer').hidden = composer !== 'files'; $('#text-composer').hidden = composer !== 'text'; updateButtons(); }));
 $('#message').addEventListener('input', updateButtons);
@@ -44,7 +44,7 @@ function renderSecurity() { const complete = state.transfers.filter(row => row.s
   ['04','Accountability','Hash-chained server events anchored to a separate audit-witness process.',state.audit?.verified ? `${state.audit.count} records verified against witness` : 'Independent checkpoint verification pending'],
   ['05','Availability','Bounded connections, deadlines, storage limits and resumable chunk transfers.',`${complete.reduce((sum,row) => sum+(row.retries || 0),0)} reconnect retries across delivered files`],
   ['06','Replay resistance','Session sequence checks and durable owner/request identifiers.',`${complete.length} unique completed request IDs in this workspace`]
-]; $('#security-cards').innerHTML = controls.map(([index,name,description,status]) => `<article class="security-card"><div class="eyebrow">CONTROL ${index} /</div><h3>${name}</h3><p>${description}</p><div class="control-state">${escaped(status)}</div></article>`).join(''); const audit = state.audit; $('#audit-summary').innerHTML = state.mode !== 'local' ? 'Local witness verification is available in the local simulation. Verify a remote server’s audit on its host.' : audit?.verified ? `<strong>✓ Audit chain and independent checkpoint match.</strong><br>${audit.count} records · Verified ${escaped(new Date(audit.verified_at).toLocaleTimeString())}<code>${escaped(audit.head)}</code>` : audit ? '<strong>Verification failed.</strong> Inspect the failed job message and the server log. The chain is not shown as verified.' : 'Audit events are available below. Choose Verify audit chain to check them against the authenticated witness.'; $('#audit-rows').innerHTML = state.events.slice().reverse().map(event => `<tr><td>${event.index}</td><td>${escaped(event.event)}</td><td>${escaped(event.device || '—')}</td><td><span class="status ${event.outcome === 'ok' ? '' : 'failed'}">${escaped(event.outcome)}</span></td><td>${escaped(new Date(event.timestamp).toLocaleTimeString())}</td></tr>`).join('') || '<tr><td colspan="5">No local audit events yet.</td></tr>'; }
+]; $('#security-cards').innerHTML = controls.map(([index,name,description,status]) => `<article class="security-card"><div class="eyebrow">CONTROL ${index} /</div><h3>${name}</h3><p>${description}</p><div class="control-state">${escaped(status)}</div></article>`).join(''); const audit = state.audit; $('#audit-summary').innerHTML = state.mode !== 'local' ? 'Local witness verification is available in the local simulation. Verify a remote server’s audit on its host.' : audit?.verified ? `<strong>✓ Audit chain and independent checkpoint match.</strong><br>${audit.count} records · Verified ${escaped(audit.verified_at)}<code>${escaped(audit.head)}</code>` : audit ? '<strong>Verification failed.</strong> Inspect the failed job message and the server log. The chain is not shown as verified.' : 'Audit events are available below. Choose Verify audit chain to check them against the authenticated witness.'; $('#audit-rows').innerHTML = state.events.slice().reverse().map(event => `<tr><td>${event.index}</td><td>${escaped(event.event)}</td><td>${escaped(event.device || '—')}</td><td><span class="status ${event.outcome === 'ok' ? '' : 'failed'}">${escaped(event.outcome)}</span></td><td>${escaped(event.timestamp)}</td></tr>`).join('') || '<tr><td colspan="5">No local audit events yet.</td></tr>'; }
 function renderAnalysis() { const result = state.analysis; if (!result) { $('#analysis-content').className = 'panel analysis-empty'; $('#analysis-content').innerHTML = '<span class="upload-mark">≋</span><h2>Your traffic evidence will appear here.</h2><p>Send a demo file, then choose Analyze capture.</p>'; return; } $('#analysis-content').className = 'panel'; $('#analysis-content').innerHTML = `<div class="panel-heading"><h2>Captured stream snapshot</h2><span class="outline-tag">${escaped(result.engine || 'Engine not recorded')}</span><span class="outline-tag">USER0 PCAP → SQLITE / XML</span></div><button id="open-wireshark" class="button secondary">Open in Wireshark ↗</button><div class="analysis-stats"><div><span>OBSERVATIONS</span><strong>${result.records}</strong><small class="muted">Matching export counts</small></div><div><span>OBSERVED PAYLOAD</span><strong>${bytes(result.payload_bytes)}</strong><small class="muted">Both directions</small></div><div><span>CAPTURE WINDOW</span><strong>${result.duration_seconds.toFixed(2)} s</strong><small class="muted">First to last observation</small></div><div><span>WEIGHTED ENTROPY</span><strong>${result.weighted_record_entropy.toFixed(2)}</strong><small class="muted">Bits per byte, descriptive</small></div></div><div class="analysis-note">Known transaction marker <code>"amount_paise"</code>: <strong>${result.marker_found ? 'found in observed stream' : 'not found in this snapshot'}</strong>.<br>Marker absence alone does not prove confidentiality. This capture contains encrypted transfers, handshake data and public protocol metadata.</div>`; $('#open-wireshark').addEventListener('click',()=>action('/api/wireshark/open')); }
 function render() { const online = state.connected; $('#identity').textContent = state.identity; $('#connection-pill').classList.toggle('online', online); $('#connection-pill').innerHTML = `<i></i> ${online ? 'Device authenticated' : 'Devices offline'}`; $('#live-dot').classList.toggle('online', online); $('#client-node').textContent = `${state.identity} · PID ${state.topology.client}`; $('#server-node').textContent = state.mode === 'local' ? `Separate process · PID ${state.topology.server}` : state.target ? `${state.target[0]}:${state.target[1]}` : 'Not connected'; $('#witness-node').textContent = state.mode === 'local' ? `Separate process · PID ${state.topology.witness}` : state.mode === 'remote' ? 'Managed on the remote lab host' : 'Starts with your local demo'; $('#channel-label').textContent = online ? 'AES-256-GCM · protocol v3' : 'Waiting for connection'; $('#topology-note').textContent = state.mode === 'remote' ? 'Connected to a remote server. Keys stay in the local Python client; audit verification runs on the server host.' : 'The local demo runs the client, server and witness as three separate processes on this computer.'; const rows = state.transfers, complete = rows.filter(row => row.status === 'complete'); $('#metric-files').textContent = complete.length; const total = bytes(complete.reduce((sum,row) => sum + row.size,0)).split(' '); $('#metric-bytes').innerHTML = `${total[0]} <span>${total[1]}</span>`; const last = complete[0]; $('#metric-time').innerHTML = last ? `${(last.elapsed_ms/1000).toFixed(2)} <span>s</span>` : '—'; $('#metric-audit').textContent = state.audit?.verified ? state.audit.count : '—'; $('#metric-audit-note').textContent = state.audit?.verified ? 'Witness matched' : state.audit ? 'Verification failed' : 'Verification pending'; renderTransfers(rows); renderSecurity(); renderAnalysis(); renderPerformance(); renderTesting(); const job = state.jobs.find(job => ['running','queued'].includes(job.status)); $('#job-progress').hidden = !job; if (job) { const percentage = job.total ? Math.min(100, Math.floor(job.done/job.total*100)) : 0; $('#job-progress').innerHTML = `<div class="progress-caption"><span>${escaped(job.label)}</span><span>${job.total ? `${bytes(job.done)} / ${bytes(job.total)} · ${percentage}%` : 'Working…'}</span></div><div class="progress-track"><span style="width:${job.total ? percentage : 15}%"></span></div>`; } for (const job of state.jobs) { if (['complete','failed'].includes(job.status) && !seenJobs.has(job.id)) { seenJobs.add(job.id); if (initialized) toast(job.status === 'failed' ? job.error : job.result?.message || `${job.label} complete`, job.status === 'failed'); } } initialized = true; updateButtons(); }
 let refreshing = false;
@@ -88,4 +88,83 @@ $('#metrics-file').addEventListener('change', () => { metricsSelection = $('#met
 $('#run-tests').addEventListener('click', () => action('/api/tests/run'));
 $$('[data-metrics-export]').forEach(button => button.addEventListener('click', () => saveResponse(`/api/metrics/${button.dataset.metricsExport}`,`crypto_metrics.${button.dataset.metricsExport}`).catch(error => toast(error.message,true))));
 $$('[data-test-export]').forEach(button => button.addEventListener('click', () => saveResponse(`/api/tests/export/${button.dataset.testExport}`,`test_results.${button.dataset.testExport}`).catch(error => toast(error.message,true))));
+let evidenceVersion = '', evidenceSelection = '', evidenceRecord = null, evidenceLoading = '';
+function renderEvidenceSelector() {
+  const selected = $('#evidence-file').value || evidenceSelection;
+  const rows = state?.transfers || [];
+  $('#evidence-file').innerHTML = rows.map(row => `<option value="${row.request}">${escaped(row.name)} · ${row.request.slice(0,8)}</option>`).join('');
+  if (rows.some(row => row.request === selected)) $('#evidence-file').value = selected;
+  evidenceSelection = $('#evidence-file').value;
+  $('#export-evidence').disabled = !evidenceSelection;
+  $('#export-audit').disabled = state?.mode !== 'local';
+  $('#refresh-evidence').disabled = !evidenceSelection;
+  if (!evidenceSelection) { evidenceRecord = null; evidenceVersion = ''; $('#evidence-content').textContent = 'Send a file, then select it to inspect its evidence.'; return; }
+  const row = rows.find(row => row.request === evidenceSelection);
+  const version = `${evidenceSelection}:${row.updated_at || row.download_verified || row.status}`;
+  if (!$('#evidence-view').hidden && evidenceVersion !== version && evidenceLoading !== version) loadEvidence(version);
+}
+async function loadEvidence(version) {
+  const request = evidenceSelection;
+  evidenceLoading = version;
+  try {
+    const data = await (await api(`/api/evidence/${request}`)).json();
+    if (request !== evidenceSelection) return;
+    evidenceRecord = data; evidenceVersion = version; renderEvidence(data);
+  } catch (error) { toast(error.message,true); }
+  finally { if(evidenceLoading === version) evidenceLoading = ''; }
+}
+function renderEvidence(data) {
+  const row = data.transfer;
+  const value = (label, content) => `<div class="evidence-value"><span>${escaped(label)}</span><code>${escaped(content ?? 'Not recorded')}</code></div>`;
+  let html = `<div class="panel-heading"><h2>${escaped(row.name)}</h2><span class="outline-tag">${escaped(row.media)} · ${bytes(row.size)}</span></div>`;
+  html += '<h3>UTC timestamps</h3><div class="evidence-grid">';
+  for (const [field,label] of Object.entries({created:'Transfer created',upload_started:'Upload started',upload_completed:'Upload acknowledged',download_started:'Receive started',download_verified:'Receive verified'})) html += value(label,row[field]);
+  html += `</div><p class="muted">${escaped(data.timestamp_scope)}</p><h3>SHA-256 hash values</h3>${value('Original file',row.sha256)}${value('Received file',row.received_sha256)}`;
+  html += `<p class="evidence-hash-state">${row.received_sha256 ? row.received_sha256 === row.sha256 ? 'Original and received SHA-256 values match.' : 'Original and received hashes differ.' : 'Receive the file to display its independently computed hash.'}</p>`;
+  const proof = row.signature;
+  html += '<h3>Digital signature</h3>' + (proof ? value('Algorithm',proof.algorithm) + value('Public signing key',proof.public_key) + value('Signature (hex)',proof.signature) : '<p>No signature recorded. Send a new file or Sign & resend.</p>');
+  html += '<h3>Measured security operations</h3>';
+  for (const direction of ['upload','download']) {
+    const metric = row.crypto?.[direction];
+    html += `<h4>${direction === 'upload' ? 'Upload' : 'Receive'} · ${metric?.signature_verified ? 'Signature verified' : 'No verified signature recorded in this scope'}</h4>`;
+    if (!metric) { html += '<p class="muted">No operation measurements for this direction yet.</p>'; continue; }
+    html += '<div class="table-scroll"><table class="crypto-table"><thead><tr><th>OPERATION</th><th>CLIENT</th><th>SERVER</th></tr></thead><tbody>';
+    for (const [operation,label] of Object.entries(operationLabels)) {
+      const cell = endpoint => { const measured = metric[endpoint]?.[operation]; return measured ? `${measured.milliseconds.toFixed(6)} ms <small>${measured.calls} calls · ${bytes(measured.bytes)} · ${measured.failures} failed</small>` : 'Not performed in this scope'; };
+      html += `<tr><td>${label}</td><td>${cell('client')}</td><td>${cell('server')}</td></tr>`;
+    }
+    html += `</tbody></table></div><p class="muted">${escaped(metric.scope)}</p>`;
+  }
+  html += '<h3>Actual ciphertext</h3><p class="muted">One media-chunk sample per operation. Hexadecimal encoding; no plaintext or secret keys. AES-GCM authenticates public headers without encrypting them.</p>';
+  let samples = 0;
+  for (const direction of ['upload','download']) for (const sample of row.crypto?.[direction]?.ciphertext_samples || []) {
+    samples++;
+    html += `<div class="ciphertext-sample"><h4>${direction === 'upload' ? 'Upload' : 'Receive'} · ${escaped(sample.direction)} · ${sample.ciphertext_bytes} ciphertext bytes</h4>`;
+    html += value('Observed at (UTC)',sample.observed_at) + value(`Actual ciphertext prefix (${sample.prefix_bytes} bytes)`,sample.ciphertext_prefix_hex) + value('AES-GCM tag (16 bytes)',sample.gcm_tag_hex) + value('Nonce (12 bytes)',sample.nonce_hex) + value('Authenticated public header',sample.authenticated_header) + '</div>';
+  }
+  if (!samples) html += '<p>No media-record sample exists for this operation. New uploads/receives collect actual samples; a fully resumed operation may send no media chunks.</p>';
+  html += '<h3>Image metrics</h3>';
+  const image = row.image_metrics;
+  if (row.media !== 'image') html += '<p class="muted">Not applicable: this transfer is not an image.</p>';
+  else if (!image) html += '<p>Send or receive this image again to collect image measurements.</p>';
+  else {
+    for (const side of ['source','received']) if(image[side]) {
+      const info = image[side];
+      html += `<div class="evidence-grid">${value(`${side} dimensions`,`${info.width} × ${info.height} pixels`)}${value(`${side} format / mode / channels`,`${info.format} / ${info.mode} / ${info.channels}`)}${value(`${side} encoded size`,`${info.encoded_bytes} bytes`)}</div>`;
+    }
+    if (image.mse !== undefined) html += `<div class="evidence-grid">${value('Mean squared error (RGBA)',image.mse)}${value('Peak signal-to-noise ratio',image.psnr_db === null ? image.psnr : `${image.psnr_db.toFixed(6)} dB`)}${value('Decoded pixels identical',image.pixels_equal ? 'Yes' : 'No')}</div>`;
+    html += `<p class="muted">${escaped(image.comparison)} ${escaped(image.scope || '')}</p>`;
+  }
+  html += '<h3>Transfer logs</h3><p class="muted">Client activity and matching server audit events. Verify server audit integrity in Security & audit.</p>';
+  const logs = [...data.client_events.map(event => ({...event,origin:'Client'})),...data.server_events.map(event => ({...event,origin:'Server'}))].sort((a,b) => a.timestamp.localeCompare(b.timestamp));
+  html += '<div class="table-scroll evidence-logs"><table><thead><tr><th>UTC TIMESTAMP</th><th>ORIGIN / EVENT</th><th>OUTCOME</th><th>DETAILS</th></tr></thead><tbody>';
+  html += logs.map(event => `<tr><td>${escaped(event.timestamp)}</td><td>${escaped(event.origin)}<br>${escaped(event.event)}</td><td>${escaped(event.outcome)}</td><td>${escaped(typeof event.details === 'string' ? event.details : JSON.stringify(event.details))}${event.hash ? `<br>Audit hash: <code>${escaped(event.hash)}</code>` : ''}</td></tr>`).join('') || '<tr><td colspan="4">No recorded events for this transfer.</td></tr>';
+  html += `</tbody></table></div><p class="muted">${escaped(data.server_log_scope)} Export Evidence JSON for the complete selected record, including request/session IDs.</p>`;
+  $('#evidence-content').innerHTML = html;
+}
+$('#evidence-file').addEventListener('change', () => { evidenceVersion = ''; renderEvidenceSelector(); });
+$('#refresh-evidence').addEventListener('click', () => { evidenceVersion = ''; renderEvidenceSelector(); });
+$('#export-evidence').addEventListener('click', () => saveResponse(`/api/evidence/${evidenceSelection}`,`evidence_${evidenceSelection}.json`).catch(error => toast(error.message,true)));
+$('#export-audit').addEventListener('click', () => saveResponse('/api/logs/audit.jsonl','server_audit.jsonl').catch(error => toast(error.message,true)));
+setInterval(() => { if(state) renderEvidenceSelector(); }, 1000);
 refresh();

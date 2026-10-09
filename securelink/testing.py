@@ -18,6 +18,11 @@ REQUIREMENTS=[
      'tests':['test_pcap_conversion_counts_and_cross_record_marker','test_pyshark_only_no_custom_fallback']},
     {'goal':'Efficiency measurements','expected':'Measured crypto calls and transfer latency, no invented timing',
      'tests':['test_signed_transfer_metrics_and_persistence','test_end_to_end_benchmark_produces_measured_results']},
+    {'goal':'Transfer evidence & image metrics','expected':'Actual ciphertext samples, UTC logs, matching hashes and measured image fidelity',
+     'tests':['test_ciphertext_sample_is_the_actual_transmitted_and_verified_record',
+              'test_invalid_ciphertext_is_not_reported_as_a_verified_received_sample',
+              'test_image_metrics_measure_exact_pixels_and_detect_changed_pixels',
+              'test_gui_real_multimedia_roundtrips_audit_exports_and_restart']},
 ]
 
 

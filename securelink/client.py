@@ -4,6 +4,8 @@ import random
 import socket
 import time
 import uuid
+import struct
+from datetime import datetime, timezone
 from .protocol import canonical, decode_json, handshake_client, plain_session, ProtocolError
 from .settings import CHUNK_SIZE
 from .storage import metadata_for, validate_metadata, file_hash, TransferStore
@@ -27,7 +29,7 @@ class CountingSocket:
         return getattr(self.sock,name)
 
 class Client:
-    def __init__(self, address, identity, secret, server='bank-server', attempts=4, retry_delay=.2, plaintext_lab=False, signing_key=None):
+    def __init__(self, address, identity, secret, server='bank-server', attempts=4, retry_delay=.2, plaintext_lab=False, signing_key=None, collect_evidence=False):
         if plaintext_lab and address[0] != '127.0.0.1':
             raise ValueError('Plaintext baseline is restricted to loopback')
         self.address, self.identity, self.secret, self.server = address, identity, secret, server
@@ -41,6 +43,28 @@ class Client:
         self.metrics=CryptoMetrics()
         self.server_metrics={}
         self.last_signature=None
+        self.collect_evidence=collect_evidence
+        self.ciphertext_samples=[]
+        self.verified_hash=None
+
+    def observe_record(self, direction, packet):
+        """Keep one actual media-record sample per direction, without keys/plaintext."""
+        length=struct.unpack('!H',packet[:2])[0]
+        header=packet[2:2+length]
+        value=decode_json(header)
+        if value['kind'] not in ('chunk','data') or any(row['direction']==direction for row in self.ciphertext_samples):
+            return
+        body=packet[2+length:]
+        ciphertext=body[:-16]
+        self.ciphertext_samples.append({
+            'direction':direction,'observed_at':datetime.now(timezone.utc).isoformat(),
+            'kind':value['kind'],'request':value['meta'].get('request'),
+            'offset':value['meta'].get('offset'),'session':value['sid'],'sequence':value['seq'],
+            'nonce_hex':(b'\0'*4+value['seq'].to_bytes(8,'big')).hex(),
+            'ciphertext_bytes':len(ciphertext),'prefix_bytes':min(64,len(ciphertext)),
+            'ciphertext_prefix_hex':ciphertext[:64].hex(),'gcm_tag_hex':body[-16:].hex(),
+            'authenticated_header':header.decode('ascii'),
+            'scope':'First successfully sent/received media record; prefix is at most 64 bytes. No plaintext or secret keys.'})
 
     def connect(self):
         self.close()
@@ -50,6 +74,7 @@ class Client:
         try:
             self.session = plain_session(sock, True) if self.plaintext_lab else handshake_client(sock, self.identity, self.secret, self.server)
             self.session.metrics=self.metrics
+            self.session.record_observer=self.observe_record if self.collect_evidence else None
         except Exception:
             sock.close()
             raise
@@ -95,6 +120,7 @@ class Client:
     def upload(self, path, request=None, progress=None):
         self.metrics=CryptoMetrics()
         self.server_metrics={}
+        self.ciphertext_samples=[]
         if self.session:
             self.session.metrics=self.metrics
         path = Path(path)
@@ -138,6 +164,8 @@ class Client:
         self.metrics=CryptoMetrics()
         self.server_metrics={}
         self.last_signature=None
+        self.ciphertext_samples=[]
+        self.verified_hash=None
         if self.session:
             self.session.metrics=self.metrics
         TransferStore.check_request(request)
@@ -171,10 +199,12 @@ class Client:
                     if progress:
                         progress(offset, meta['size'])
                 os.fsync(stream.fileno())
-            if file_hash(partial,self.metrics) != meta['sha256']:
+            received_hash=file_hash(partial,self.metrics)
+            if received_hash != meta['sha256']:
                 raise ProtocolError('Downloaded file hash mismatch')
             self.call('download_complete', request=request)
             os.replace(partial, destination)
+            self.verified_hash=received_hash
             return destination
         return self._retry(attempt)
 

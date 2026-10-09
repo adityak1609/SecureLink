@@ -71,16 +71,18 @@ def test_gui_http_boundary_and_no_credential_disclosure(gui):
     assert gui[0].token.encode() not in data
     assert gui[0].signing_key.hex().encode() not in data
     assert json.loads(data)['mode'] == 'offline'
+    assert http(gui,'GET','/api/evidence/'+'0'*32,authenticated=False)[0]==401
+    assert http(gui,'GET','/api/logs/audit.jsonl',authenticated=False)[0]==401
+    assert http(gui,'GET','/api/evidence/'+'0'*32)[0]==400
+    assert http(gui,'GET','/api/logs/audit.jsonl')[0]==400
 
 
 def test_gui_rejects_unsafe_uploads_before_reading_body(gui):
-    assert http(gui, 'POST', '/api/upload?name=..%2Fsecret.txt', b'x')[0] == 400
-    for name in ('folder\\note (1).txt', 'note:1.txt', 'note\r\n.txt', 'a' * 117 + '.txt'):
+    for name in ('../secret.txt', 'malware.exe', 'folder\\note (1).txt', 'note:1.txt', 'note\r\n.txt', 'a' * 117 + '.txt'):
         # Withhold the declared body to prove validation happens before reading it.
         assert http(gui, 'POST', '/api/upload?name=' + quote(name, safe=''),
                     headers={'Content-Length': '1'})[0] == 400
-    assert http(gui, 'POST', '/api/upload?name=malware.exe', b'x')[0] == 400
-    assert http(gui, 'POST', '/api/upload?name=note.txt', b'x', headers={'Content-Length': str(33*1024*1024)})[0] == 400
+    assert http(gui, 'POST', '/api/upload?name=note.txt', headers={'Content-Length': str(33*1024*1024)})[0] == 400
     assert http(gui, 'POST', '/api/upload?name=note.txt', b'')[0] == 400
 
 
@@ -101,6 +103,25 @@ def test_gui_real_multimedia_roundtrips_audit_exports_and_restart(gui):
         assert row['crypto']['upload']['signature_verified']
         assert row['crypto']['download']['signature_verified']
         assert row['crypto']['upload']['client']['signing']['nanoseconds']>0
+        status,evidence_data=http(gui,'GET','/api/evidence/'+request)
+        assert status==200
+        evidence=json.loads(evidence_data)
+        transfer=evidence['transfer']
+        assert transfer['received_sha256']==transfer['sha256']
+        assert transfer['created']<=transfer['upload_started']<=transfer['upload_completed']<=transfer['download_started']<=transfer['download_verified']
+        assert all(transfer[field].endswith('+00:00') for field in ('created','upload_completed','download_verified'))
+        assert {event['event'] for event in evidence['client_events']}=={'upload_started','upload_completed','download_started','download_verified'}
+        assert {'authentication','signature_verified','transfer_complete','download_complete'}<={event['event'] for event in evidence['server_events']}
+        assert all(event['request']==request for event in evidence['server_events'] if event['event']!='authentication')
+        assert 'source' not in transfer
+        assert app.config['secret'].encode() not in evidence_data and app.signing_key.hex().encode() not in evidence_data
+        for direction,kind in (('upload','chunk'),('download','data')):
+            sample=transfer['crypto'][direction]['ciphertext_samples'][0]
+            assert sample['request']==request and sample['kind']==kind
+            assert 0<sample['prefix_bytes']<=64 and len(sample['gcm_tag_hex'])==32 and len(sample['nonce_hex'])==24
+        if name.endswith('.png'):
+            assert transfer['image_metrics']['mse']==0 and transfer['image_metrics']['pixels_equal']
+            assert transfer['image_metrics']['source']['encoded_bytes']==transfer['size']
         status, data = http(gui, 'GET', '/api/file/' + request)
         assert status == 200 and data == (ROOT / 'sample_data/fixtures' / name).read_bytes()
     audit = job(gui, '/api/audit/verify')
@@ -115,6 +136,8 @@ def test_gui_real_multimedia_roundtrips_audit_exports_and_restart(gui):
     assert status==200 and b'signature_verification' in csv and b'encryption' in csv
     assert app.signing_key.hex().encode() not in http(gui,'GET','/api/metrics/json')[1]
     assert len(app.history) == 4
+    status,log_data=http(gui,'GET','/api/logs/audit.jsonl')
+    assert status==200 and b'transfer_complete' in log_data
     start(gui)  # Retained transfers belong to the logical demo, not an ephemeral port.
     assert len(app.state()['transfers']) == 4
     received = job(gui, '/api/download', {'request': app.history[0]['request']})

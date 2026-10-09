@@ -99,6 +99,7 @@ class Session:
     sent_bytes: int = 0
     received_bytes: int = 0
     metrics: CryptoMetrics = field(default_factory=CryptoMetrics)
+    record_observer: object = None
 
     def encode(self, kind, payload=b'', metadata=None):
         if self.send_seq >= 2**64:
@@ -123,6 +124,8 @@ class Session:
         packet = self.encode(kind, payload, metadata)
         send_packet(self.sock, packet)
         self.sent_bytes += 4 + len(packet)
+        if self.secure and self.record_observer:
+            self.record_observer('sent', packet)
 
     def receive(self):
         packet = recv_packet(self.sock)
@@ -149,6 +152,8 @@ class Session:
         else:
             body=ciphertext
         self.receive_seq += 1
+        if self.secure and self.record_observer:
+            self.record_observer('received', packet)
         return value['kind'], body, value['meta']
 
     def close(self):

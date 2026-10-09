@@ -16,9 +16,14 @@
   "digital_signature": "Ed25519",
   "crypto_timings_displayed": true,
   "gui_test_suite": {
-    "passed": 65,
+    "passed": 68,
     "failed": 0,
     "skipped": 0,
     "requirements_complete": true
-  }
+  },
+  "transfer_evidence_displayed": true,
+  "actual_ciphertext_displayed": true,
+  "utc_logs_exported": true,
+  "image_mse": 0.0,
+  "source_received_hashes_match": true
 }
