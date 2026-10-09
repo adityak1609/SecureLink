@@ -2,15 +2,17 @@ import time
 from .protocol import canonical, decode_json, handshake_server, plain_session, ProtocolError
 from .service import TCPService
 from .storage import TransferStore
+from .signatures import verify
 
 class BankServer(TCPService):
-    def __init__(self, directory, devices, audit, plaintext_lab=False, fault=None, **kwargs):
+    def __init__(self, directory, devices, audit, plaintext_lab=False, fault=None, signing_keys=None, **kwargs):
         if plaintext_lab and kwargs.get('host', '127.0.0.1') != '127.0.0.1':
             raise ValueError('Plaintext baseline is restricted to IPv4 loopback')
         super().__init__(**kwargs)
         self.store = TransferStore(directory)
         self.devices, self.audit, self.plaintext_lab = devices, audit, plaintext_lab
         self.fault = fault
+        self.signing_keys=signing_keys or {}
 
     def handle(self, conn, addr):
         try:
@@ -36,13 +38,27 @@ class BankServer(TCPService):
             request = meta.get('request', '')
             try:
                 if kind == 'begin':
-                    result = self.store.begin(session.peer, request, decode_json(body))
+                    value=decode_json(body)
+                    signature=None
+                    if isinstance(value,dict) and set(value)=={'metadata','signature'}:
+                        signature=value['signature']
+                        value=value['metadata']
+                        key=self.signing_keys.get(session.peer)
+                        if key is None:
+                            raise ProtocolError('No trusted signing key registered for this device')
+                        verify(signature,key,session.peer,request,value,session.metrics)
+                    elif session.peer in self.signing_keys:
+                        raise ProtocolError('A digital signature is required for this device')
+                    result = self.store.begin(session.peer, request, value,signature,session.metrics)
+                    if signature:
+                        self.audit.log('signature_verified',device=session.peer,session=session.sid,request=request,
+                                       details={'algorithm':'Ed25519'})
                     self.audit.log('transfer_begin', device=session.peer, session=session.sid, request=request)
                 elif kind == 'chunk':
                     result = {'offset': self.store.chunk(session.peer, request, meta.get('offset'), body)}
                 elif kind == 'finish':
                     self.audit.log('transfer_finalize_requested', device=session.peer, session=session.sid, request=request)
-                    result = self.store.finish(session.peer, request)
+                    result = self.store.finish(session.peer, request,session.metrics)
                     self.audit.log('transfer_complete', device=session.peer, session=session.sid, request=request,
                                    details={'sha256': result['metadata']['sha256'], 'size': result['metadata']['size']})
                 elif kind == 'status':
@@ -60,6 +76,7 @@ class BankServer(TCPService):
                     raise ProtocolError('Unknown operation')
                 if self.fault and self.fault(kind, request, result):
                     return
+                result={**result,'crypto_metrics':session.metrics.snapshot()}
                 session.send('ok', canonical(result), {'request': request})
             except (ProtocolError, UnicodeError) as exc:
                 self.audit.log('request_rejected', device=session.peer, session=session.sid,

@@ -11,5 +11,14 @@
   "browser_errors": [],
   "responsive_width": 390,
   "audit_verified": true,
-  "pcap_exports": true
+  "pcap_exports": true,
+  "analysis_engine": "PyShark + Wireshark/TShark",
+  "digital_signature": "Ed25519",
+  "crypto_timings_displayed": true,
+  "gui_test_suite": {
+    "passed": 65,
+    "failed": 0,
+    "skipped": 0,
+    "requirements_complete": true
+  }
 }

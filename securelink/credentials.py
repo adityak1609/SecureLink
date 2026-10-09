@@ -38,3 +38,33 @@ def devices(config):
             raise ValueError('Invalid device credential')
         result[name] = key
     return result
+
+
+def provision_signatures(directory, identity):
+    """Add a separate signing pair without replacing existing transport keys."""
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    directory=Path(directory)
+    private_path=directory/'signing_private.json'
+    public_path=directory/'signing_public.json'
+    if private_path.exists():
+        value=load(private_path)
+        if value['device']!=identity:
+            raise ValueError('Signing identity does not match client credentials')
+        private=bytes.fromhex(value['private_key'])
+        key=Ed25519PrivateKey.from_private_bytes(private)
+    else:
+        if public_path.exists():
+            raise ValueError('Signing private key missing; refusing to replace the pinned public key')
+        key=Ed25519PrivateKey.generate()
+        private=key.private_bytes_raw()
+        with private_path.open('x',encoding='utf-8') as output:
+            json.dump({'device':identity,'private_key':private.hex()},output,indent=2)
+        os.chmod(private_path,0o600)
+    public=key.public_key().public_bytes_raw()
+    if public_path.exists():
+        if devices(load(public_path)).get(identity)!=public:
+            raise ValueError('Signing public key does not match the existing private key')
+    else:
+        with public_path.open('x',encoding='utf-8') as output:
+            json.dump({'devices':{identity:public.hex()}},output,indent=2)
+    return private

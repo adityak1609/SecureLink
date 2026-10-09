@@ -7,6 +7,9 @@ import uuid
 from .protocol import canonical, decode_json, handshake_client, plain_session, ProtocolError
 from .settings import CHUNK_SIZE
 from .storage import metadata_for, validate_metadata, file_hash, TransferStore
+from .metrics import CryptoMetrics
+from .signatures import sign, verify
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 class CountingSocket:
     def __init__(self,sock):
@@ -24,7 +27,7 @@ class CountingSocket:
         return getattr(self.sock,name)
 
 class Client:
-    def __init__(self, address, identity, secret, server='bank-server', attempts=4, retry_delay=.2, plaintext_lab=False):
+    def __init__(self, address, identity, secret, server='bank-server', attempts=4, retry_delay=.2, plaintext_lab=False, signing_key=None):
         if plaintext_lab and address[0] != '127.0.0.1':
             raise ValueError('Plaintext baseline is restricted to loopback')
         self.address, self.identity, self.secret, self.server = address, identity, secret, server
@@ -34,6 +37,10 @@ class Client:
         self.handshake_ms = 0
         self.sent_bytes = 0
         self.received_bytes = 0
+        self.signing_key=signing_key
+        self.metrics=CryptoMetrics()
+        self.server_metrics={}
+        self.last_signature=None
 
     def connect(self):
         self.close()
@@ -42,6 +49,7 @@ class Client:
         start = time.perf_counter()
         try:
             self.session = plain_session(sock, True) if self.plaintext_lab else handshake_client(sock, self.identity, self.secret, self.server)
+            self.session.metrics=self.metrics
         except Exception:
             sock.close()
             raise
@@ -67,7 +75,9 @@ class Client:
             return data
         if result != 'ok':
             raise ProtocolError('Expected acknowledgement')
-        return decode_json(data)
+        response=decode_json(data)
+        self.server_metrics=response.get('crypto_metrics',{})
+        return response
 
     def _retry(self, operation):
         for attempt in range(self.attempts):
@@ -83,13 +93,19 @@ class Client:
                 time.sleep(min(2.0,self.retry_delay*2**attempt)+random.uniform(0,.02))
 
     def upload(self, path, request=None, progress=None):
+        self.metrics=CryptoMetrics()
+        self.server_metrics={}
+        if self.session:
+            self.session.metrics=self.metrics
         path = Path(path)
         request = request or uuid.uuid4().hex
         TransferStore.check_request(request)
-        meta = metadata_for(path)
+        meta = metadata_for(path,self.metrics)
         validate_metadata(meta)
+        self.last_signature=sign(self.signing_key,self.identity,request,meta,self.metrics) if self.signing_key else None
+        begin={'metadata':meta,'signature':self.last_signature} if self.last_signature else meta
         def attempt():
-            status = self.call('begin', canonical(meta), request=request)
+            status = self.call('begin', canonical(begin), request=request)
             offset = status['offset']
             if type(offset) is not int or not 0<=offset<=meta['size']:
                 raise ProtocolError('Invalid resume offset')
@@ -113,9 +129,17 @@ class Client:
             if not result['complete'] or result['metadata'] != meta:
                 raise ProtocolError('Incorrect completion acknowledgement')
             return result
-        return self._retry(attempt)
+        result=self._retry(attempt)
+        if self.last_signature and result.get('signature')!=self.last_signature:
+            raise ProtocolError('Server did not acknowledge the expected digital signature')
+        return result
 
     def download(self, request, destination, progress=None):
+        self.metrics=CryptoMetrics()
+        self.server_metrics={}
+        self.last_signature=None
+        if self.session:
+            self.session.metrics=self.metrics
         TransferStore.check_request(request)
         destination = Path(destination)
         destination.parent.mkdir(parents=True, exist_ok=True)
@@ -126,6 +150,11 @@ class Client:
                 raise ProtocolError('Transfer not complete')
             meta = status['metadata']
             validate_metadata(meta)
+            proof=status.get('signature')
+            if self.signing_key:
+                public=Ed25519PrivateKey.from_private_bytes(self.signing_key).public_key().public_bytes_raw()
+                verify(proof,public,self.identity,request,meta,self.metrics)
+                self.last_signature=proof
             offset = partial.stat().st_size if partial.exists() else 0
             if offset > meta['size']:
                 raise ProtocolError('Partial download exceeds expected length')
@@ -142,7 +171,7 @@ class Client:
                     if progress:
                         progress(offset, meta['size'])
                 os.fsync(stream.fileno())
-            if file_hash(partial) != meta['sha256']:
+            if file_hash(partial,self.metrics) != meta['sha256']:
                 raise ProtocolError('Downloaded file hash mismatch')
             self.call('download_complete', request=request)
             os.replace(partial, destination)

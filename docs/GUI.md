@@ -10,6 +10,12 @@ Open Security & audit and verify the audit chain. The operation reads the log wi
 
 Open Traffic analysis and analyze the capture. Export actual USER0 stream PCAP, SQLite, XML and the summary. These are socket-read observations, not IP/TCP packets. Entropy and marker visibility are supporting descriptive observations, not proof of encryption. The capture begins when the current local demo starts; analysis is a snapshot.
 
+Decoding now always uses PyShark's FileCapture with the Wireshark/TShark engine. The Wireshark Lua dissector decodes the USER0 observer envelope; Python then aggregates decoded fields and creates the exports. There is no automatic Python parser fallback. Install Wireshark/TShark on a fresh machine. Use **Open in Wireshark** to inspect the analyzed snapshot in the desktop viewer.
+
+Open **Crypto performance** to select a transfer and display measured encryption, decryption, SHA-256 hashing, Ed25519 signing and verification times for client/server and upload/receive. The digest, public signing key and signature are displayed; private keys are never sent to JavaScript. CSV/JSON exports include actual times/counts/bytes. Missing operations are shown as not performed. Timing scope and the excluded final server acknowledgement encryption are stated on the page.
+
+Open **Testing & results** and run the actual isolated suite. Inspect passed, failed, skipped and missing requirement coverage, then export JSON/JUnit XML. See [the testing plan](TESTING.md). Browser playback/layout checks are separate from the backend suite and covered by browser_smoke.py.
+
 Interrupted uploads appear with a Resume action. Their local source and request ID are retained. Interrupted downloads retain their partial file and resume when Receive is retried. The encrypted backend verifies complete downloads before replacing their destination. The GUI does not fabricate an interruption; disconnect a lab peer or network to demonstrate recovery.
 
 Use the sidebar power icon to close the application and stop its services. Closing the browser tab alone leaves the app running. The launcher reopens the existing instance for the same state directory; a kernel lock prevents competing instances from writing that state.
@@ -19,6 +25,8 @@ Use the sidebar power icon to close the application and stop its services. Closi
 The GUI runs on the client computer. Its browser HTTP listener is always loopback-only. The receiver can run on a second machine using `bank_server.py`; the independently protected witness can run on the client machine or another lab host. Use the topology and private-network port instructions in the README.
 
 The GUI uses `runtime/gui/credentials/client.json`, not `secrets/client.json`. With the GUI closed, either copy your securely provisioned client credential file to that path, or add the GUI device identity and matching secret to the receiver's device registry through a secure provisioning channel. Do not paste keys into the frontend, put them in the report, or commit credential files. Keep the server identity in the client configuration consistent with `bank-server`.
+
+Signed GUI transfers also need the matching Ed25519 public-key registry on the remote server. Securely copy only `runtime/gui/credentials/signing_public.json` to that server, and run bank_server.py with `--signing-keys PATH_TO_PUBLIC_REGISTRY`. Keep signing_private.json on the client. The server pins the public key by authenticated device; it does not trust a public key merely because it arrived in an upload. Use separate state directories for independently provisioned identities.
 
 Choose Connect a device and enter the receiver's hostname/IP and TCP port. A successful mutual-authentication handshake is required before the GUI selects that endpoint. Matching credentials are required; an invalid handshake does not replace an existing working local demo. A successful remote connection stops locally managed demo services.
 

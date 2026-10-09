@@ -15,9 +15,19 @@ def test_pcap_conversion_counts_and_cross_record_marker(tmp_path):
     result=analyze(path,tmp_path/'out',marker=b'SECRET')
     assert result['records']==2 and result['marker_found']
     assert result['retransmissions'] is None
+    assert result['backend']=='pyshark' and result['engine']=='PyShark + Wireshark/TShark'
     with sqlite3.connect(tmp_path/'out/packets.sqlite') as db:
         assert db.execute('SELECT count(*) FROM packets').fetchone()[0]==2
     assert len(ET.parse(tmp_path/'out/packets.xml').getroot())==2
+
+
+def test_pyshark_only_no_custom_fallback(tmp_path,monkeypatch):
+    import securelink.analysis as analysis
+    with pytest.raises(ValueError,match='no custom parser fallback'):
+        analyze(tmp_path/'unused.pcap',tmp_path/'out',backend='stream')
+    monkeypatch.setattr(analysis,'tshark_path',lambda:None)
+    with pytest.raises(RuntimeError,match='Wireshark/TShark is required'):
+        analyze(tmp_path/'unused.pcap',tmp_path/'out')
 
 def test_truncated_capture_rejected(tmp_path):
     path=tmp_path/'bad.pcap';path.write_bytes(b'\xd4\xc3\xb2\xa1')

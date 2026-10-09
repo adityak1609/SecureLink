@@ -22,9 +22,18 @@ The GUI includes a transfer workspace, device connection view, text composer, fi
 3. Choose **Receive** to retrieve the server's copy through the encrypted channel and verify its SHA-256. Then use **Preview** or **Save**.
 4. Open **Security & audit**, click **Verify audit chain**, and show the witness checkpoint and recorded events.
 5. Open **Traffic analysis**, analyze the current captured stream, and export PCAP, SQLite, XML or JSON for the report.
+   Decoding runs through **PyShark → Wireshark/TShark**, using the Wireshark Lua dissector for the USER0 observer envelope. There is no custom Python parser fallback. **Open in Wireshark** opens the analyzed snapshot in the desktop viewer.
 6. Use **Disconnect devices** to stop the simulated services, or the power icon in the sidebar to close the application. Closing only the browser tab leaves the local application running; launching again reopens that instance.
 
 The GUI provisions its own random keys under excluded `runtime/gui/credentials/` and retains transfers in `runtime/gui/`. It does not overwrite CLI keys or existing CLI state. Restarting the local demo retains its server transfers and history. If a transfer fails, **Resume** reuses its original request ID. The interface displays controls separately from verification results; an audit is marked verified only after its head and count match the live authenticated witness.
+
+**Crypto performance** displays measured encryption, decryption, SHA-256 file hashing, Ed25519 signing and signature verification times for each upload/receive, separately for client and server. It shows call counts, processed bytes, failures, file digest, public signing key and signature, and exports CSV/JSON. Times surround the actual library operations. Hash timing includes file reads; server measurements stop before encoding the final acknowledgement, and cover the last connection when retries occur. Unperformed operations show a dash rather than a fabricated zero.
+
+GUI transfers use real **Ed25519 digital signatures**, distinct from handshake HMAC authentication. The signed manifest binds the file SHA-256, original filename/media/size, device and request ID. The receiver verifies against a pinned public key before accepting the transfer; receive also checks the signature and full-file hash. GUI signing keys are provisioned separately as `signing_private.json` and `signing_public.json`. Older unsigned GUI transfers can use **Sign & resend** with their original request ID to add a signature without duplicating a committed transaction.
+
+**Testing & results → Run tests** runs the actual isolated pytest suite and displays passed, failed and skipped cases, timings and requirement coverage. Missing/skipped coverage remains incomplete. Download JSON and JUnit XML for your review. See [the testing plan](docs/TESTING.md).
+
+Install Wireshark with TShark enabled before using capture analysis or its tests on a fresh machine. Python dependencies alone do not install TShark. Npcap is only required for live Windows IP/TCP capture, not for decoding saved USER0 captures. Retained `benchmark_v3` evidence measured the earlier unsigned v3 transfers; newly displayed signature timings are live observations, not retroactive additions to that benchmark.
 
 For a remote server, choose **Connect a device** and enter its host and port. Provision matching client/server device credentials as described in [the GUI guide](docs/GUI.md). The browser UI is restricted to `127.0.0.1`; device communication can use a lab LAN. The same-host browser-to-Python interface uses local HTTP with an unguessable API token, origin checks and host validation. AES-GCM protects the client-to-server TCP leg. This local academic UI is not an internet-hosted web service.
 
@@ -142,10 +151,10 @@ Capture application streams without a driver:
 ```powershell
 .\.venv\Scripts\python capture_traffic.py --mode stream --listen-port 10000 --target-port 9999
 .\.venv\Scripts\python client_terminal.py --port 10000 upload sample_data/fixtures/video.mp4
-.\.venv\Scripts\python pcap_analyzer.py captures/session_stream.pcap --backend stream --output results/stream_analysis
+.\.venv\Scripts\python pcap_analyzer.py captures/session_stream.pcap --backend pyshark --output results/stream_analysis
 ```
 
-Optional `tools/securelink_user0.lua` makes the observer direction, connection number and observed bytes visible in Wireshark/TShark (`-X lua_script:tools/securelink_user0.lua`). The file does not decrypt application data.
+`tools/securelink_user0.lua` makes the observer direction, connection number and observed bytes visible in Wireshark/TShark (`-X lua_script:tools/securelink_user0.lua`). PyShark loads this dissector automatically. It decodes the capture wrapper inside Wireshark's engine and does not decrypt application data. Python summarizes decoded fields and creates SQLite/XML exports; it does not replace Wireshark's capture decoder.
 
 For actual network packets, install Wireshark/TShark and the Npcap driver on Windows (libpcap on Linux), then:
 
@@ -155,7 +164,7 @@ For actual network packets, install Wireshark/TShark and the Npcap driver on Win
 .\.venv\Scripts\python pcap_analyzer.py captures/network.pcapng --backend pyshark --output results/network_analysis
 ```
 
-Run transfers during the 30-second capture. Capture filters restrict acquisition to the configured lab TCP port. The network backend handles IPv4/IPv6 and reports Wireshark retransmission flags. Network marker searches are packet-local, so absence is inconclusive when a marker crosses TCP segments. Use Wireshark Follow TCP Stream for a reassembled view. The stream backend handles markers crossing observed reads. Both backends report descriptive entropy, validate SQLite/XML counts and expose sample SQL queries:
+Run transfers during the 30-second capture. Capture filters restrict acquisition to the configured lab TCP port. The network backend handles IPv4/IPv6 and reports Wireshark retransmission flags. Network marker searches are packet-local, so absence is inconclusive when a marker crosses TCP segments. Use Wireshark Follow TCP Stream for a reassembled view. The USER0 decoder preserves observed stream order for cross-read marker searches. PyShark handles both capture types and reports descriptive entropy, validate SQLite/XML counts and expose sample SQL queries:
 
 ```sql
 SELECT COUNT(*), SUM(length), SUM(payload_size) FROM packets;

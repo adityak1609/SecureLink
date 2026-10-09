@@ -9,7 +9,7 @@ from PIL import Image
 import imageio_ffmpeg
 
 from securelink.analysis import analyze,tshark_path,open_pyshark
-from securelink.capture import StreamCapture,stream_records
+from securelink.capture import StreamCapture
 from securelink.client import Client
 from securelink.lab import local_lab
 from securelink.storage import file_hash

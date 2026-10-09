@@ -7,6 +7,8 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
+import csv
+import io
 import mimetypes
 import os
 from pathlib import Path
@@ -20,11 +22,12 @@ import time
 from urllib.parse import parse_qs, urlsplit
 import webbrowser
 
-from .analysis import analyze
+from .analysis import analyze, wireshark_path
+from .testing import REQUIREMENTS, parse_results
 from .audit import AuditLog, WitnessClient
 from .capture import StreamCapture
 from .client import Client
-from .credentials import load, provision
+from .credentials import load, provision, provision_signatures
 from .settings import ROOT, MAX_FILE, EXTENSIONS
 from .storage import metadata_for, validate_metadata, validate_content
 
@@ -53,6 +56,8 @@ class Application:
         self.analysis_result = None
         self.exports = {}
         self.closed = False
+        self.test_result=None
+        self.test_xml=None
         self.history_path = self.root / 'history.json'
         self.history = json.loads(self.history_path.read_text()) if self.history_path.exists() else []
         # Provision isolated GUI keys once; existing CLI credentials are unaffected.
@@ -60,6 +65,7 @@ class Application:
         if not any((self.credentials / name).exists() for name in ('client.json', 'server.json', 'witness.json')):
             provision(self.credentials)
         self.config = load(self.credentials / 'client.json')
+        self.signing_key=provision_signatures(self.credentials,self.config['device'])
 
     def save(self):
         temporary = self.history_path.with_suffix('.tmp')
@@ -102,7 +108,7 @@ class Application:
         address = address or self.target
         if not address:
             raise ValueError('Start the local demo or connect a device first')
-        return Client(tuple(address), self.config['device'], bytes.fromhex(self.config['secret']), self.config['server'])
+        return Client(tuple(address), self.config['device'], bytes.fromhex(self.config['secret']), self.config['server'],signing_key=self.signing_key)
 
     def spawn(self, script, arguments, name):
         ready = self.root / (name + '.ready.json')
@@ -161,6 +167,7 @@ class Application:
             bank_address = self.spawn('bank_server.py', [
                 '--port', 0, '--credentials', self.credentials / 'server.json',
                 '--state', self.root / 'bank', '--audit-log', self.root / 'audit.jsonl',
+                '--signing-keys',self.credentials/'signing_public.json',
                 '--witness-port', self.witness_address[1]], 'bank')
             self.capture_path = self.root / ('capture_' + secrets.token_hex(8) + '.pcap')
             self.capture = StreamCapture(bank_address, self.capture_path).start()
@@ -238,6 +245,8 @@ class Application:
             with self.lock:
                 record.update(status='complete', elapsed_ms=round((time.perf_counter() - started)*1000, 2),
                               retries=client.retries, wire_bytes=client.sent_bytes + client.received_bytes)
+                record['signature']=client.last_signature
+                record.setdefault('crypto',{})['upload']=self.crypto_result(client,'upload')
                 self.connected = True
                 self.audit_result = None
                 self.save()
@@ -263,10 +272,20 @@ class Application:
         with self.lock:
             row['downloaded'] = True
             row['download_verified'] = now()
+            row.setdefault('crypto',{})['download']=self.crypto_result(client,'download')
             self.connected = True
             self.audit_result = None
             self.save()
         return {'request': request, 'message': 'Received copy verified with SHA-256; ready to preview or save'}
+
+    @staticmethod
+    def crypto_result(client,direction):
+        values=client.server_metrics if direction=='upload' else client.metrics.snapshot()
+        verification=values.get('signature_verification',{})
+        return {'client':client.metrics.snapshot(),'server':client.server_metrics,
+                'signature_verified':bool(client.last_signature and verification.get('calls',0)>0 and verification.get('failures',0)==0), 'algorithm':'Ed25519' if client.last_signature else None,
+                'handshake_ms':client.handshake_ms,'direction':direction,
+                'scope':'Client operation includes retries. Server metrics cover its final connection up to response encoding; final acknowledgement encryption is excluded. Hashing includes file reads.'}
 
     def retry(self, request, job):
         row = self.record(request)
@@ -319,12 +338,57 @@ class Application:
         with self.capture.write_lock:
             self.capture.output.flush()
             shutil.copyfile(self.capture_path, snapshot)
-        result = analyze(snapshot, directory)
+        with self.lock:
+            self.analysis_result=None
+            self.exports={}
+        result = analyze(snapshot, directory,backend='pyshark')
         with self.lock:
             self.analysis_result = result
             self.exports = {'pcap': snapshot, 'sqlite': directory / 'packets.sqlite', 'xml': directory / 'packets.xml',
                             'json': directory / 'summary.json'}
-        return {'message': 'PCAP converted to SQLite and XML with matching record counts', 'records': result['records']}
+        return {'message': 'Decoded with PyShark + Wireshark/TShark; SQLite/XML counts match', 'records': result['records']}
+
+    def open_wireshark(self,job):
+        path=self.exports.get('pcap')
+        if not path:
+            raise ValueError('Analyze a capture first')
+        executable=wireshark_path()
+        if not executable:
+            raise RuntimeError('Install Wireshark to open the capture viewer')
+        subprocess.Popen([executable,'-X','lua_script:'+str(ROOT/'tools/securelink_user0.lua'),'-r',str(path)],
+                         cwd=ROOT,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,
+                         creationflags=subprocess.CREATE_NO_WINDOW if os.name=='nt' else 0)
+        return {'message':'Opened the analyzed capture in Wireshark'}
+
+    def run_tests(self,job):
+        directory=self.root/'testing'/secrets.token_hex(8)
+        directory.mkdir(parents=True)
+        xml=directory/'results.xml'
+        completed=subprocess.run([sys.executable,'-m','pytest','tests','-q','-p','no:cacheprovider',
+                                  '--junitxml='+str(xml)],cwd=ROOT,capture_output=True,text=True,
+                                 timeout=300,creationflags=subprocess.CREATE_NO_WINDOW if os.name=='nt' else 0)
+        (directory/'console.log').write_text(completed.stdout+completed.stderr,encoding='utf-8')
+        result=parse_results(xml,completed.returncode)
+        result['finished_at']=now()
+        with self.lock:
+            self.test_result=result
+            self.test_xml=xml
+        return {'message':f"Tests finished: {result['passed']} passed, {result['failed']} failed, {result['skipped']} skipped"}
+
+    def metrics_export(self,format):
+        records=self.state()['transfers']
+        if format=='json':
+            return json.dumps(records,indent=2).encode()
+        stream=io.StringIO(newline='')
+        writer=csv.writer(stream)
+        writer.writerow(['request','file','media','file_bytes','direction','endpoint','operation','calls','milliseconds','bytes_processed','failures'])
+        for record in records:
+            for direction,metrics in record.get('crypto',{}).items():
+                for endpoint in ('client','server'):
+                    for operation,value in metrics[endpoint].items():
+                        writer.writerow([record['request'],record['name'],record['media'],record['size'],direction,endpoint,
+                                         operation,value['calls'],value['milliseconds'],value['bytes'],value['failures']])
+        return stream.getvalue().encode('utf-8')
 
     def state(self):
         with self.lock:
@@ -346,7 +410,8 @@ class Application:
                     'audit': self.audit_result, 'analysis': self.analysis_result,
                     'topology': {'client': os.getpid(), 'server': self.processes[1].pid if len(self.processes)>1 else None,
                                  'witness': self.processes[0].pid if self.processes else None},
-                    'max_file': MAX_FILE, 'exports': list(self.exports)}
+                    'max_file': MAX_FILE, 'exports': list(self.exports),
+                    'tests':self.test_result,'test_requirements':REQUIREMENTS,'wireshark_available':bool(wireshark_path())}
 
     def close(self):
         with self.lock:
@@ -423,6 +488,21 @@ class Handler(BaseHTTPRequestHandler):
             app = self.server.app
             if parsed.path == '/api/state':
                 self.respond(app.state())
+            elif parsed.path in ('/api/metrics/csv','/api/metrics/json'):
+                format=parsed.path.rsplit('/',1)[-1]
+                body=app.metrics_export(format)
+                self.headers_for(200,'text/csv' if format=='csv' else 'application/json',len(body),'crypto_metrics.'+format)
+                self.wfile.write(body)
+            elif parsed.path=='/api/tests/export/json':
+                if app.test_result is None:
+                    raise ValueError('Run the tests first')
+                body=json.dumps(app.test_result,indent=2).encode()
+                self.headers_for(200,'application/json',len(body),'test_results.json')
+                self.wfile.write(body)
+            elif parsed.path=='/api/tests/export/xml':
+                if app.test_xml is None:
+                    raise ValueError('Run the tests first')
+                self.file(app.test_xml,attachment=True)
             elif parsed.path.startswith('/api/file/'):
                 request = parsed.path.rsplit('/', 1)[-1]
                 row = app.record(request)
@@ -436,11 +516,13 @@ class Handler(BaseHTTPRequestHandler):
                 self.file(path, attachment=True)
             elif parsed.path.startswith('/api/report/'):
                 name = parsed.path.rsplit('/', 1)[-1]
-                if name not in ('SYNOPSIS.html', 'EVALUATION.html', 'PROTOCOL.md'):
+                if name not in ('SYNOPSIS.html', 'EVALUATION.html', 'PROTOCOL.md','GUI.md','TESTING.md'):
                     raise ValueError('Unknown report')
                 self.file(ROOT / 'docs' / name, attachment=True)
             else:
                 self.respond({'error': 'Not found'}, 404)
+        except ConnectionError:
+            return
         except (ValueError, OSError) as exc:
             self.respond({'error': str(exc)[:300]}, 400)
 
@@ -520,6 +602,10 @@ class Handler(BaseHTTPRequestHandler):
                 result = app.submit('Verify audit chain', app.verify_audit)
             elif parsed.path == '/api/analysis':
                 result = app.submit('Analyze captured traffic', app.analyze_capture)
+            elif parsed.path=='/api/wireshark/open':
+                result=app.submit('Open in Wireshark',app.open_wireshark)
+            elif parsed.path=='/api/tests/run':
+                result=app.submit('Run isolated security and regression tests',app.run_tests)
             elif parsed.path == '/api/shutdown':
                 with app.lock:
                     if any(j['status'] in ('running', 'queued') for j in app.jobs):
@@ -531,6 +617,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.respond({'error': 'Not found'}, 404)
                 return
             self.respond(result, 202)
+        except ConnectionError:
+            return
         except (ValueError, OSError) as exc:
             self.respond({'error': str(exc)[:300]}, 400)
 

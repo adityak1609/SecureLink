@@ -34,6 +34,16 @@ The client makes at most four attempts with bounded exponential backoff and jitt
 
 `status` and `read` permit downloads only for the authenticated owner's completed transfers. Download chunks authenticate the request and offset. The client retains a partial file after a connection failure, verifies the final SHA-256 and then requests an anchored download-completion event before publishing the destination file. A stale/corrupted partial file fails the final hash check and must be discarded explicitly before retrying.
 
+## Signed file manifests and measurements
+
+The GUI adds an Ed25519 signed-transfer extension to v3. Transport HMAC authentication remains separate and is not labelled a digital signature. A signed `begin` body contains `{metadata, signature}`; the signature has algorithm `Ed25519`, the sender's public key, and its 64-byte signature encoded as hex. The signed bytes are the domain separator `SecureLink/file-signature/Ed25519/v1\0` followed by canonical JSON containing device, request ID and the complete metadata (name, media, size and SHA-256).
+
+The receiver accepts signed transfers only against that authenticated device's provisioned, pinned public key. When a signing key is registered, unsigned begins are rejected. An arbitrary public key supplied by a sender cannot establish trust. Accepted signatures are retained in SQLite beside the owner/request record and must remain unchanged on retries. File completion still requires the declared length, final SHA-256 and format checks, so the accepted signature binds the committed file contents through their digest.
+
+For signed GUI receives, the client verifies the saved signature against its own provisioned sender public key and the returned manifest before writing media, then verifies the complete downloaded SHA-256. A changed request, device, filename or file digest invalidates the signature. This authenticates the provisioned signing key; public identity certification, legal non-repudiation and private-key-compromise protection are not claimed.
+
+Actual AES-GCM encrypt/decrypt, SHA-256 file-read/hash and Ed25519 sign/verify calls are timed using `perf_counter_ns`. Reports retain operation counts, elapsed nanoseconds/milliseconds, processed bytes and failures. Client counters reset per upload/receive and include retries. Server counters cover the final connection up to encoding its last response, excluding that response's encryption; they are reported inside authenticated encrypted acknowledgements. The GUI labels this scope and does not present missing measurements as zeros. File hashing includes file I/O; handshake time includes communication and is separate from cryptographic-call timing. These observations include instrumentation overhead and are not universal algorithm-performance estimates.
+
 ## Audit evidence
 
 Each canonical JSONL event includes a sequential index, UTC timestamp, previous entry hash, event, authenticated device, session, request, outcome and limited non-content details. SHA-256 covers all these fields. A lock serializes concurrent writes; data is fsynced before anchoring. An independently operated witness authenticates a different audit PSK and stores the latest count/head pair in SQLite.

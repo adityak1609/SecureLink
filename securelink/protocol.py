@@ -10,7 +10,8 @@ import secrets
 import socket
 import struct
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from .metrics import CryptoMetrics
 
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -97,6 +98,7 @@ class Session:
     receive_seq: int = 0
     sent_bytes: int = 0
     received_bytes: int = 0
+    metrics: CryptoMetrics = field(default_factory=CryptoMetrics)
 
     def encode(self, kind, payload=b'', metadata=None):
         if self.send_seq >= 2**64:
@@ -106,7 +108,11 @@ class Session:
         if len(header) > MAX_HEADER:
             raise ProtocolError('Header too large')
         nonce = b'\0' * 4 + self.send_seq.to_bytes(8, 'big')
-        body = AESGCM(self.send_key).encrypt(nonce, payload, header) if self.secure else payload
+        if self.secure:
+            with self.metrics.measure('encryption',len(payload)):
+                body = AESGCM(self.send_key).encrypt(nonce, payload, header)
+        else:
+            body=payload
         packet = struct.pack('!H', len(header)) + header + body
         if len(packet) > MAX_FRAME:
             raise ProtocolError('Frame too large')
@@ -137,7 +143,11 @@ class Session:
             raise ProtocolError('Invalid message metadata')
         nonce = b'\0' * 4 + self.receive_seq.to_bytes(8, 'big')
         ciphertext = packet[2 + length:]
-        body = AESGCM(self.receive_key).decrypt(nonce, ciphertext, header) if self.secure else ciphertext
+        if self.secure:
+            with self.metrics.measure('decryption',max(0,len(ciphertext)-16)):
+                body=AESGCM(self.receive_key).decrypt(nonce,ciphertext,header)
+        else:
+            body=ciphertext
         self.receive_seq += 1
         return value['kind'], body, value['meta']
 

@@ -1,0 +1,487 @@
+{
+  "passed": 65,
+  "failed": 0,
+  "skipped": 0,
+  "total": 65,
+  "returncode": 0,
+  "success": true,
+  "requirements_complete": true,
+  "requirements": [
+    {
+      "goal": "Confidentiality & integrity",
+      "expected": "Fresh directional keys; altered ciphertext/header rejected",
+      "tests": [
+        "test_fresh_sessions_and_direction_keys",
+        "test_tampering_rejected"
+      ],
+      "status": "passed",
+      "executed_cases": 5
+    },
+    {
+      "goal": "Authentication",
+      "expected": "Incorrect credentials and expired timestamps rejected",
+      "tests": [
+        "test_wrong_secret_and_server_identity",
+        "test_expired_handshake_timestamp_rejected"
+      ],
+      "status": "passed",
+      "executed_cases": 2
+    },
+    {
+      "goal": "Digital signatures",
+      "expected": "Valid signatures accepted; wrong key and changed manifest rejected",
+      "tests": [
+        "test_signed_transfer_metrics_and_persistence",
+        "test_signature_context_tampering_rejected",
+        "test_server_requires_pinned_signature"
+      ],
+      "status": "passed",
+      "executed_cases": 8
+    },
+    {
+      "goal": "Accountability",
+      "expected": "Audit edits, truncation and checkpoint rollback detected",
+      "tests": [
+        "test_audit_attacks_detected",
+        "test_witness_rejects_rollback_and_conflict"
+      ],
+      "status": "passed",
+      "executed_cases": 5
+    },
+    {
+      "goal": "Availability & replay",
+      "expected": "Interrupted transfers resume; duplicate requests remain idempotent",
+      "tests": [
+        "test_lost_ack_recovery_and_idempotency",
+        "test_download_recovers_after_disconnect",
+        "test_exact_record_replay_rejected"
+      ],
+      "status": "passed",
+      "executed_cases": 4
+    },
+    {
+      "goal": "Four media types & GUI",
+      "expected": "Real files transfer and retrieve; browser API access is protected",
+      "tests": [
+        "test_gui_real_multimedia_roundtrips_audit_exports_and_restart",
+        "test_gui_http_boundary_and_no_credential_disclosure"
+      ],
+      "status": "passed",
+      "executed_cases": 2
+    },
+    {
+      "goal": "Wireshark / PyShark module",
+      "expected": "Real TShark decode, validated XML/SQLite exports, no parser fallback",
+      "tests": [
+        "test_pcap_conversion_counts_and_cross_record_marker",
+        "test_pyshark_only_no_custom_fallback"
+      ],
+      "status": "passed",
+      "executed_cases": 2
+    },
+    {
+      "goal": "Efficiency measurements",
+      "expected": "Measured crypto calls and transfer latency, no invented timing",
+      "tests": [
+        "test_signed_transfer_metrics_and_persistence",
+        "test_end_to_end_benchmark_produces_measured_results"
+      ],
+      "status": "passed",
+      "executed_cases": 2
+    }
+  ],
+  "cases": [
+    {
+      "name": "test_pcap_conversion_counts_and_cross_record_marker",
+      "module": "tests.test_analysis",
+      "seconds": 0.598,
+      "status": "passed"
+    },
+    {
+      "name": "test_pyshark_only_no_custom_fallback",
+      "module": "tests.test_analysis",
+      "seconds": 0.014,
+      "status": "passed"
+    },
+    {
+      "name": "test_truncated_capture_rejected",
+      "module": "tests.test_analysis",
+      "seconds": 0.004,
+      "status": "passed"
+    },
+    {
+      "name": "test_pyshark_reads_actual_demo_capture",
+      "module": "tests.test_analysis",
+      "seconds": 0.684,
+      "status": "passed"
+    },
+    {
+      "name": "test_pyshark_network_parser_with_synthetic_unit_fixture[False]",
+      "module": "tests.test_analysis",
+      "seconds": 0.553,
+      "status": "passed"
+    },
+    {
+      "name": "test_pyshark_network_parser_with_synthetic_unit_fixture[True]",
+      "module": "tests.test_analysis",
+      "seconds": 0.615,
+      "status": "passed"
+    },
+    {
+      "name": "test_end_to_end_benchmark_produces_measured_results",
+      "module": "tests.test_benchmarks",
+      "seconds": 20.042,
+      "status": "passed"
+    },
+    {
+      "name": "test_gui_http_boundary_and_no_credential_disclosure",
+      "module": "tests.test_gui",
+      "seconds": 0.782,
+      "status": "passed"
+    },
+    {
+      "name": "test_gui_rejects_unsafe_uploads_before_reading_body",
+      "module": "tests.test_gui",
+      "seconds": 0.702,
+      "status": "passed"
+    },
+    {
+      "name": "test_gui_real_multimedia_roundtrips_audit_exports_and_restart",
+      "module": "tests.test_gui",
+      "seconds": 21.692,
+      "status": "passed"
+    },
+    {
+      "name": "test_gui_text_filepicker_resumption_and_invalid_content",
+      "module": "tests.test_gui",
+      "seconds": 5.94,
+      "status": "passed"
+    },
+    {
+      "name": "test_gui_detects_audit_edit",
+      "module": "tests.test_gui",
+      "seconds": 4.349,
+      "status": "passed"
+    },
+    {
+      "name": "test_gui_failed_remote_authentication_does_not_replace_local_demo",
+      "module": "tests.test_gui",
+      "seconds": 3.692,
+      "status": "passed"
+    },
+    {
+      "name": "test_exact_record_replay_rejected",
+      "module": "tests.test_security",
+      "seconds": 0.009,
+      "status": "passed"
+    },
+    {
+      "name": "test_tampering_rejected[ciphertext]",
+      "module": "tests.test_security",
+      "seconds": 0.009,
+      "status": "passed"
+    },
+    {
+      "name": "test_tampering_rejected[kind]",
+      "module": "tests.test_security",
+      "seconds": 0.008,
+      "status": "passed"
+    },
+    {
+      "name": "test_tampering_rejected[offset]",
+      "module": "tests.test_security",
+      "seconds": 0.008,
+      "status": "passed"
+    },
+    {
+      "name": "test_tampering_rejected[request]",
+      "module": "tests.test_security",
+      "seconds": 0.009,
+      "status": "passed"
+    },
+    {
+      "name": "test_wrong_secret_and_server_identity",
+      "module": "tests.test_security",
+      "seconds": 0.23,
+      "status": "passed"
+    },
+    {
+      "name": "test_fresh_sessions_and_direction_keys",
+      "module": "tests.test_security",
+      "seconds": 0.293,
+      "status": "passed"
+    },
+    {
+      "name": "test_old_session_record_rejected",
+      "module": "tests.test_security",
+      "seconds": 0.314,
+      "status": "passed"
+    },
+    {
+      "name": "test_oversized_frame_rejected_before_payload",
+      "module": "tests.test_security",
+      "seconds": 0.006,
+      "status": "passed"
+    },
+    {
+      "name": "test_absolute_deadline",
+      "module": "tests.test_security",
+      "seconds": 0.088,
+      "status": "passed"
+    },
+    {
+      "name": "test_real_media_roundtrip[transaction.txt]",
+      "module": "tests.test_security",
+      "seconds": 0.526,
+      "status": "passed"
+    },
+    {
+      "name": "test_real_media_roundtrip[identity.png]",
+      "module": "tests.test_security",
+      "seconds": 0.431,
+      "status": "passed"
+    },
+    {
+      "name": "test_real_media_roundtrip[identity.jpg]",
+      "module": "tests.test_security",
+      "seconds": 0.599,
+      "status": "passed"
+    },
+    {
+      "name": "test_real_media_roundtrip[audio.wav]",
+      "module": "tests.test_security",
+      "seconds": 0.593,
+      "status": "passed"
+    },
+    {
+      "name": "test_real_media_roundtrip[audio.mp3]",
+      "module": "tests.test_security",
+      "seconds": 0.449,
+      "status": "passed"
+    },
+    {
+      "name": "test_real_media_roundtrip[video.mp4]",
+      "module": "tests.test_security",
+      "seconds": 0.699,
+      "status": "passed"
+    },
+    {
+      "name": "test_lost_ack_recovery_and_idempotency[chunk]",
+      "module": "tests.test_security",
+      "seconds": 0.678,
+      "status": "passed"
+    },
+    {
+      "name": "test_lost_ack_recovery_and_idempotency[finish]",
+      "module": "tests.test_security",
+      "seconds": 0.817,
+      "status": "passed"
+    },
+    {
+      "name": "test_resume_across_new_client",
+      "module": "tests.test_security",
+      "seconds": 0.75,
+      "status": "passed"
+    },
+    {
+      "name": "test_request_conflict_and_owner_isolation",
+      "module": "tests.test_security",
+      "seconds": 0.683,
+      "status": "passed"
+    },
+    {
+      "name": "test_invalid_transfer[traversal]",
+      "module": "tests.test_security",
+      "seconds": 0.237,
+      "status": "passed"
+    },
+    {
+      "name": "test_invalid_transfer[oversize]",
+      "module": "tests.test_security",
+      "seconds": 0.228,
+      "status": "passed"
+    },
+    {
+      "name": "test_invalid_transfer[mismatch]",
+      "module": "tests.test_security",
+      "seconds": 0.38,
+      "status": "passed"
+    },
+    {
+      "name": "test_invalid_transfer[reorder]",
+      "module": "tests.test_security",
+      "seconds": 0.355,
+      "status": "passed"
+    },
+    {
+      "name": "test_invalid_transfer[incomplete]",
+      "module": "tests.test_security",
+      "seconds": 0.358,
+      "status": "passed"
+    },
+    {
+      "name": "test_audit_attacks_detected[edit]",
+      "module": "tests.test_security",
+      "seconds": 0.232,
+      "status": "passed"
+    },
+    {
+      "name": "test_audit_attacks_detected[truncate]",
+      "module": "tests.test_security",
+      "seconds": 0.24,
+      "status": "passed"
+    },
+    {
+      "name": "test_audit_attacks_detected[rewrite]",
+      "module": "tests.test_security",
+      "seconds": 0.237,
+      "status": "passed"
+    },
+    {
+      "name": "test_audit_attacks_detected[delete]",
+      "module": "tests.test_security",
+      "seconds": 0.237,
+      "status": "passed"
+    },
+    {
+      "name": "test_concurrent_audit_writes",
+      "module": "tests.test_security",
+      "seconds": 0.619,
+      "status": "passed"
+    },
+    {
+      "name": "test_connection_limit_recovers",
+      "module": "tests.test_security",
+      "seconds": 1.019,
+      "status": "passed"
+    },
+    {
+      "name": "test_download_recovers_after_disconnect",
+      "module": "tests.test_security",
+      "seconds": 0.817,
+      "status": "passed"
+    },
+    {
+      "name": "test_partial_and_completed_state_survive_store_restart",
+      "module": "tests.test_security",
+      "seconds": 0.831,
+      "status": "passed"
+    },
+    {
+      "name": "test_witness_rejects_rollback_and_conflict",
+      "module": "tests.test_security",
+      "seconds": 0.239,
+      "status": "passed"
+    },
+    {
+      "name": "test_audit_fails_closed_and_recovers_pending",
+      "module": "tests.test_security",
+      "seconds": 0.284,
+      "status": "passed"
+    },
+    {
+      "name": "test_legitimate_transfer_while_slow_peer_connected",
+      "module": "tests.test_security",
+      "seconds": 0.464,
+      "status": "passed"
+    },
+    {
+      "name": "test_file_quota_and_format_rejection",
+      "module": "tests.test_security",
+      "seconds": 0.642,
+      "status": "passed"
+    },
+    {
+      "name": "test_duplicate_json_fields_rejected",
+      "module": "tests.test_security",
+      "seconds": 0.003,
+      "status": "passed"
+    },
+    {
+      "name": "test_plaintext_lab_cannot_bind_to_lan",
+      "module": "tests.test_security",
+      "seconds": 0.014,
+      "status": "passed"
+    },
+    {
+      "name": "test_expired_handshake_timestamp_rejected",
+      "module": "tests.test_security",
+      "seconds": 0.375,
+      "status": "passed"
+    },
+    {
+      "name": "test_valid_timestamp_within_skew_accepted",
+      "module": "tests.test_security",
+      "seconds": 0.251,
+      "status": "passed"
+    },
+    {
+      "name": "test_signed_transfer_metrics_and_persistence",
+      "module": "tests.test_signatures",
+      "seconds": 0.791,
+      "status": "passed"
+    },
+    {
+      "name": "test_signature_context_tampering_rejected[hash]",
+      "module": "tests.test_signatures",
+      "seconds": 0.035,
+      "status": "passed"
+    },
+    {
+      "name": "test_signature_context_tampering_rejected[name]",
+      "module": "tests.test_signatures",
+      "seconds": 0.019,
+      "status": "passed"
+    },
+    {
+      "name": "test_signature_context_tampering_rejected[request]",
+      "module": "tests.test_signatures",
+      "seconds": 0.023,
+      "status": "passed"
+    },
+    {
+      "name": "test_signature_context_tampering_rejected[device]",
+      "module": "tests.test_signatures",
+      "seconds": 0.02,
+      "status": "passed"
+    },
+    {
+      "name": "test_server_requires_pinned_signature[unsigned]",
+      "module": "tests.test_signatures",
+      "seconds": 0.289,
+      "status": "passed"
+    },
+    {
+      "name": "test_server_requires_pinned_signature[wrong-key]",
+      "module": "tests.test_signatures",
+      "seconds": 0.293,
+      "status": "passed"
+    },
+    {
+      "name": "test_server_requires_pinned_signature[corrupted-signature]",
+      "module": "tests.test_signatures",
+      "seconds": 0.276,
+      "status": "passed"
+    },
+    {
+      "name": "test_download_rejects_changed_signed_manifest",
+      "module": "tests.test_signatures",
+      "seconds": 0.537,
+      "status": "passed"
+    },
+    {
+      "name": "test_missing_or_skipped_requirement_is_not_reported_as_passed",
+      "module": "tests.test_testing",
+      "seconds": 0.04,
+      "status": "passed"
+    },
+    {
+      "name": "test_collection_failure_or_empty_run_is_not_success",
+      "module": "tests.test_testing",
+      "seconds": 0.084,
+      "status": "passed"
+    }
+  ],
+  "duration_seconds": 77.33500000000001,
+  "finished_at": "2026-10-09T13:36:25.581440+00:00"
+}

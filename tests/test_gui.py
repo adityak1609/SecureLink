@@ -68,6 +68,7 @@ def test_gui_http_boundary_and_no_credential_disclosure(gui):
     status, data = http(gui, 'GET', '/api/state')
     assert status == 200 and gui[0].config['secret'].encode() not in data
     assert gui[0].token.encode() not in data
+    assert gui[0].signing_key.hex().encode() not in data
     assert json.loads(data)['mode'] == 'offline'
 
 
@@ -91,15 +92,23 @@ def test_gui_real_multimedia_roundtrips_audit_exports_and_restart(gui):
         received = job(gui, '/api/download', {'request': request})
         assert received['status'] == 'complete', received
         assert received['done'] == received['total']
+        row=next(row for row in app.state()['transfers'] if row['request']==request)
+        assert row['crypto']['upload']['signature_verified']
+        assert row['crypto']['download']['signature_verified']
+        assert row['crypto']['upload']['client']['signing']['nanoseconds']>0
         status, data = http(gui, 'GET', '/api/file/' + request)
         assert status == 200 and data == (ROOT / 'sample_data/fixtures' / name).read_bytes()
     audit = job(gui, '/api/audit/verify')
     assert audit['status'] == 'complete' and audit['result']['verified']
     analysis = job(gui, '/api/analysis')
     assert analysis['status'] == 'complete' and analysis['result']['records'] > 0
+    assert app.state()['analysis']['engine']=='PyShark + Wireshark/TShark'
     for name in ('pcap', 'sqlite', 'xml', 'json'):
         status, data = http(gui, 'GET', '/api/export/' + name)
         assert status == 200 and data
+    status,csv=http(gui,'GET','/api/metrics/csv')
+    assert status==200 and b'signature_verification' in csv and b'encryption' in csv
+    assert app.signing_key.hex().encode() not in http(gui,'GET','/api/metrics/json')[1]
     assert len(app.history) == 4
     start(gui)  # Retained transfers belong to the logical demo, not an ephemeral port.
     assert len(app.state()['transfers']) == 4

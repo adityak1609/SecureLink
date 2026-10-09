@@ -29,7 +29,7 @@ def run():
             page = browser.new_page(viewport={'width': 1440, 'height': 1100}, accept_downloads=True)
             page.on('pageerror', lambda error: errors.append(str(error)))
             page.goto(server.origin + '/#token=' + app.token)
-            page.wait_for_function('initialized')
+            page.wait_for_function('() => initialized')
             assert page.title() == 'SecureLink — Secure workspace'
             assert '#token=' not in page.url
             assert page.locator('#send-button').is_disabled()
@@ -54,7 +54,7 @@ def run():
                 if name.endswith('.txt'):
                     assert 'amount_paise' in page.locator('#preview-content pre').inner_text()
                 elif name.endswith('.png'):
-                    page.wait_for_function('document.querySelector("#preview-content img")?.naturalWidth > 0')
+                    page.wait_for_function('() => document.querySelector("#preview-content img")?.naturalWidth > 0')
                 else:
                     kind = 'audio' if name.endswith('.wav') else 'video'
                     page.wait_for_function('(kind) => document.querySelector("#preview-content " + kind)?.readyState >= 1', arg=kind)
@@ -77,9 +77,21 @@ def run():
             page.locator('[data-close="preview-dialog"]').click()
             page.locator('[data-composer="files"]').click()
             page.locator('#file-input').set_input_files(str(ROOT / 'sample_data/fixtures' / 'identity.jpg'))
-            page.wait_for_function('document.querySelector("#selected-preview img")?.naturalWidth > 0')
+            page.wait_for_function('() => document.querySelector("#selected-preview img")?.naturalWidth > 0')
             operation('#send-button')
             assert page.locator('#metric-files').inner_text() == '6'
+
+            page.locator('.nav-item[data-view="performance"]').click()
+            page.locator('#metrics-file').select_option(page.evaluate('state.transfers[0].request'))
+            assert 'Ed25519 signed file manifest' in page.locator('#metrics-content').inner_text()
+            assert 'AES-256-GCM encryption' in page.locator('#metrics-content').inner_text()
+            assert 'Ed25519 signing' in page.locator('#metrics-content').inner_text()
+            assert page.locator('.crypto-table').count()==1  # Selected JPEG has not yet been received.
+            with page.expect_download() as download_info:
+                page.locator('[data-metrics-export="csv"]').click()
+            download_info.value.save_as(str(output/'crypto_metrics.csv'))
+            assert 'signature_verification' in (output/'crypto_metrics.csv').read_text()
+            page.screenshot(path=str(output/'performance.png'),full_page=True)
 
             page.locator('.nav-item[data-view="security"]').click()
             operation('#verify-audit')
@@ -87,11 +99,24 @@ def run():
             page.screenshot(path=str(output / 'security.png'), full_page=True)
             page.locator('.nav-item[data-view="traffic"]').click()
             operation('#analyze')
+            assert page.evaluate('state.analysis.backend')=='pyshark'
+            assert 'PyShark + Wireshark/TShark' in page.locator('#analysis-content').inner_text()
             assert page.locator('[data-export="sqlite"]').is_enabled()
             with page.expect_download() as download_info:
                 page.locator('[data-export="xml"]').click()
             download_info.value.save_as(str(output / 'packets.xml'))
             page.screenshot(path=str(output / 'traffic.png'), full_page=True)
+            page.locator('.nav-item[data-view="testing"]').click()
+            count=page.evaluate('state.jobs.length')
+            page.locator('#run-tests').click()
+            page.wait_for_function('(count) => state.jobs.length > count && !busy()',arg=count,timeout=300000)
+            report=page.evaluate('state.tests')
+            assert report['success'] and report['requirements_complete'],report
+            assert report['skipped']==0 and report['failed']==0
+            with page.expect_download() as download_info:
+                page.locator('[data-test-export="json"]').click()
+            download_info.value.save_as(str(output/'test_results.json'))
+            page.screenshot(path=str(output/'testing.png'),full_page=True)
             page.locator('.nav-item[data-view="guide"]').click()
             assert page.locator('.guide-steps li').count() == 5
             with page.expect_download() as download_info:
@@ -99,7 +124,7 @@ def run():
             assert download_info.value.suggested_filename == 'PROTOCOL.md'
             page.locator('.nav-item[data-view="workspace"]').click()
             page.reload()
-            page.wait_for_function('initialized && state.connected')
+            page.wait_for_function('() => initialized && state.connected')
             assert page.locator('#metric-files').inner_text() == '6'
             page.screenshot(path=str(output / 'workspace.png'), full_page=True)
             page.set_viewport_size({'width': 390, 'height': 844})
@@ -112,7 +137,10 @@ def run():
             browser.close()
         summary = {'passed': True, 'completed_uploads': 6, 'verified_downloads': 5,
                    'media_previews': ['text', 'image', 'audio', 'video'], 'browser_errors': errors,
-                   'responsive_width': 390, 'audit_verified': True, 'pcap_exports': True}
+                   'responsive_width': 390, 'audit_verified': True, 'pcap_exports': True,
+                   'analysis_engine':'PyShark + Wireshark/TShark','digital_signature':'Ed25519',
+                   'crypto_timings_displayed':True,'gui_test_suite':{'passed':report['passed'],'failed':report['failed'],'skipped':report['skipped'],
+                   'requirements_complete':report['requirements_complete']}}
         (output / 'summary.json').write_text(json.dumps(summary, indent=2))
         print(json.dumps({'output': str(output), **summary}, indent=2))
     finally:
