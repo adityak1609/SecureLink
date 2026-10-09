@@ -27,7 +27,7 @@ def validate_metadata(meta):
     if not isinstance(meta, dict) or set(meta) != {'name', 'media', 'size', 'sha256'}:
         raise ProtocolError('Invalid transfer metadata')
     name = meta['name']
-    if (not isinstance(name, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_. -]{0,119}', name)
+    if (not isinstance(name, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_. ()-]{0,119}', name)
             or name.endswith(('.', ' '))):
         raise ProtocolError('Unsafe filename')
     if EXTENSIONS.get(Path(name).suffix.lower()) != meta['media'] or meta['media'] is None:

@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 import threading
 import time
+from urllib.parse import quote
 import pytest
 
 from securelink.gui import Application, LocalServer
@@ -74,6 +75,10 @@ def test_gui_http_boundary_and_no_credential_disclosure(gui):
 
 def test_gui_rejects_unsafe_uploads_before_reading_body(gui):
     assert http(gui, 'POST', '/api/upload?name=..%2Fsecret.txt', b'x')[0] == 400
+    for name in ('folder\\note (1).txt', 'note:1.txt', 'note\r\n.txt', 'a' * 117 + '.txt'):
+        # Withhold the declared body to prove validation happens before reading it.
+        assert http(gui, 'POST', '/api/upload?name=' + quote(name, safe=''),
+                    headers={'Content-Length': '1'})[0] == 400
     assert http(gui, 'POST', '/api/upload?name=malware.exe', b'x')[0] == 400
     assert http(gui, 'POST', '/api/upload?name=note.txt', b'x', headers={'Content-Length': str(33*1024*1024)})[0] == 400
     assert http(gui, 'POST', '/api/upload?name=note.txt', b'')[0] == 400
@@ -125,12 +130,24 @@ def test_gui_text_filepicker_resumption_and_invalid_content(gui):
     sent_id = sent['result']['request']
     resumed = job(gui, '/api/retry', {'request': sent_id})
     assert resumed['status'] == 'complete' and len(gui[0].history) == 1
-    status, data = http(gui, 'POST', '/api/upload?name=note.txt', b'Uploaded through the browser')
+    filename = 'WHEN_TO_USE_7_EDUSECURE_SCENARIOS (1).txt'
+    content = b'Uploaded through the browser'
+    status, data = http(gui, 'POST', '/api/upload?name=' + quote(filename, safe=''), content)
     assert status == 202
     deadline = time.monotonic() + 20
     while any(j['status'] in ('queued','running') for j in gui[0].state()['jobs']) and time.monotonic() < deadline:
         time.sleep(.03)
     assert gui[0].state()['jobs'][-1]['status'] == 'complete'
+    uploaded = gui[0].state()['jobs'][-1]
+    assert uploaded['id'] == json.loads(data)['job']
+    request = uploaded['result']['request']
+    row = next(row for row in gui[0].state()['transfers'] if row['request'] == request)
+    assert row['name'] == filename and row['crypto']['upload']['signature_verified']
+    received = job(gui, '/api/download', {'request': request})
+    assert received['status'] == 'complete', received
+    row = next(row for row in gui[0].state()['transfers'] if row['request'] == request)
+    assert row['crypto']['download']['signature_verified']
+    assert http(gui, 'GET', '/api/file/' + request) == (200, content)
     invalid = http(gui, 'POST', '/api/text', {'text': ''})
     assert invalid[0] == 400
     assert job(gui, '/api/download', {'request': '0'*32})['status'] == 'failed'

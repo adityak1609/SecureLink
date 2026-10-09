@@ -216,8 +216,8 @@ class Application:
 
     @staticmethod
     def safe_name(name):
-        if not isinstance(name, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_. -]{0,119}', name) or name.endswith(('.', ' ')):
-            raise ValueError('Use a filename containing letters, numbers, spaces, dots, dashes or underscores (up to 120 characters)')
+        if not isinstance(name, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_. ()-]{0,119}', name) or name.endswith(('.', ' ')):
+            raise ValueError('Use a filename starting with a letter or number and containing letters, numbers, spaces, dots, dashes, underscores or parentheses (up to 120 characters)')
         if Path(name).suffix.lower() not in EXTENSIONS:
             raise ValueError('Supported formats: TXT, PNG, JPG, WAV, MP3 and MP4')
         return name
