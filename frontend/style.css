@@ -33,3 +33,14 @@ select{width:100%;font:inherit;padding:12px;border:1px solid var(--line);backgro
 .evidence-hash-state{color:var(--success)}
 dialog{background:var(--white)}
 button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,.dropzone:focus-visible{outline:2px solid var(--accent);outline-offset:4px}
+
+/* Human-readable wall-clock timestamps; raw UTC values stay in datetime/title. */
+.timestamp{display:inline-flex;flex-direction:column;gap:4px;max-width:100%;font-family:var(--font);font-variant-numeric:tabular-nums;line-height:1.4;text-align:left;vertical-align:middle}
+.timestamp-date{font-size:11px;font-weight:600;color:var(--ink);white-space:nowrap}
+.timestamp-clock{font-size:11px;color:var(--muted);white-space:nowrap}
+.timestamp-zone{font-size:9px;font-weight:600;letter-spacing:.3px;color:var(--accent);margin-left:3px}
+.timestamp-value{padding:12px 14px;background:var(--surface-soft);border:1px solid var(--line);border-radius:6px}
+.timestamp-value>span{margin-bottom:8px}.timestamp-value .timestamp-date,.timestamp-value .timestamp-clock{font-size:12px}
+.timestamp-cell{min-width:132px}.timestamp-cell>.muted{display:block;margin-bottom:5px;font-size:9px}
+.transfer-table{min-width:590px}.audit-panel table{min-width:540px}.audit-verified-time{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:10px}
+.test-run-time{display:flex;flex-wrap:wrap;gap:12px;align-items:center;padding-top:10px;border-top:1px solid var(--line)}

@@ -30,6 +30,20 @@ def run():
             page.on('pageerror', lambda error: errors.append(str(error)))
             page.goto(server.origin + '/#token=' + app.token)
             page.wait_for_function('() => initialized')
+            formatted=page.evaluate('''() => {
+                const root=document.createElement('div');
+                root.innerHTML=timestampMarkup('2026-10-09T23:59:59.123456+00:00');
+                const time=root.querySelector('time');
+                return {date:root.querySelector('.timestamp-date').textContent,
+                    clock:root.querySelector('.timestamp-clock').textContent,
+                    original:time.getAttribute('datetime'),title:time.title};
+            }''')
+            assert formatted['date']=='10 Oct 2026'
+            assert formatted['clock']=='05:29:59.123 IST'
+            assert formatted['original']=='2026-10-09T23:59:59.123456+00:00'
+            assert formatted['original'] in formatted['title']
+            assert 'Not recorded' in page.evaluate('timestampMarkup(null)')
+            assert 'Unavailable' in page.evaluate('timestampMarkup("not-a-time")')
             assert page.title() == 'SecureLink — Secure workspace'
             assert '#token=' not in page.url
             assert page.locator('#send-button').is_disabled()
@@ -98,17 +112,21 @@ def run():
             page.locator('#evidence-file').select_option(image_request)
             page.wait_for_function('(request) => evidenceRecord?.transfer.request === request',arg=image_request)
             evidence_text=page.locator('#evidence-content').inner_text()
-            for label in ('UTC timestamps','Original and received SHA-256 values match.',
+            for label in ('Timestamps · IST','Original and received SHA-256 values match.',
                           'Actual ciphertext prefix','AES-GCM tag','Nonce (12 bytes)',
                           'Mean squared error','Infinity (identical pixels)',
                           'transfer_complete','download_verified','signature_verified'):
                 assert label in evidence_text,label
             assert page.evaluate('evidenceRecord.transfer.image_metrics.mse')==0
+            assert page.locator('#evidence-content .timestamp').count()>=10
+            assert all('+00:00' in value for value in page.locator('#evidence-content time').evaluate_all('(elements) => elements.map(element => element.dateTime)'))
+            assert all('IST' in text for text in page.locator('#evidence-content .timestamp-clock').all_text_contents())
             with page.expect_download() as download_info:
                 page.locator('#export-evidence').click()
             download_info.value.save_as(str(output/'transfer_evidence.json'))
             saved_evidence=json.loads((output/'transfer_evidence.json').read_text())
             assert saved_evidence['transfer']['received_sha256']==saved_evidence['transfer']['sha256']
+            assert saved_evidence['transfer']['created'].endswith('+00:00')
             with page.expect_download() as download_info:
                 page.locator('#export-audit').click()
             download_info.value.save_as(str(output/'server_audit.jsonl'))
@@ -122,6 +140,8 @@ def run():
             page.locator('.nav-item[data-view="security"]').click()
             operation('#verify-audit')
             assert 'checkpoint match' in page.locator('#audit-summary').inner_text()
+            assert page.locator('#audit-summary time').count()==1
+            assert page.locator('#audit-rows time').count()>0
             page.screenshot(path=str(output / 'security.png'), full_page=True)
             page.locator('.nav-item[data-view="traffic"]').click()
             operation('#analyze')
@@ -139,6 +159,7 @@ def run():
             report=page.evaluate('state.tests')
             assert report['success'] and report['requirements_complete'],report
             assert report['skipped']==0 and report['failed']==0
+            assert page.locator('#test-summary time').count()==1
             with page.expect_download() as download_info:
                 page.locator('[data-test-export="json"]').click()
             download_info.value.save_as(str(output/'test_results.json'))
@@ -152,6 +173,7 @@ def run():
             page.reload()
             page.wait_for_function('() => initialized && state.connected')
             assert page.locator('#metric-files').inner_text() == '6'
+            assert page.locator('#transfer-rows time').count()==6
             page.screenshot(path=str(output / 'workspace.png'), full_page=True)
             page.set_viewport_size({'width': 390, 'height': 844})
             page.screenshot(path=str(output / 'mobile.png'), full_page=True)
