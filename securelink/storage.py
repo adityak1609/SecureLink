@@ -55,7 +55,6 @@ def validate_content(path, meta):
         '.jpg': prefix.startswith(b'\xff\xd8\xff'), '.jpeg': prefix.startswith(b'\xff\xd8\xff'),
         '.wav': prefix.startswith(b'RIFF') and prefix[8:12] == b'WAVE',
         '.mp3': prefix.startswith(b'ID3') or (len(prefix)>1 and prefix[0]==255 and prefix[1]&224==224),
-        '.mp4': prefix[4:8] == b'ftyp',
     }.get(ext, False)
     if not valid:
         raise ProtocolError('File contents do not match format')

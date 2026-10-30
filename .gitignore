@@ -2,6 +2,7 @@
 __pycache__/
 .pytest_cache/
 *.pyc
+/output/pdf/SecureLink_Current_Project_Final_Report.pdf
 secrets/
 runtime/
 backups/

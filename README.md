@@ -1,6 +1,6 @@
 # SecureLink Secure Multimedia Communication
 
-SecureLink is an educational Python client/server framework that demonstrates confidentiality, integrity, mutual device authentication, accountability and bounded recovery from communication failures. It transfers valid text, images, audio and video over TCP, supports authenticated resumable uploads and downloads, and records events against a separately operated audit witness.
+SecureLink is an educational Python client/server framework that demonstrates confidentiality, integrity, mutual device authentication, accountability and bounded recovery from communication failures. It transfers valid text, images and audio over TCP, supports authenticated resumable uploads and downloads, and records events against a separately operated audit witness.
 
 Approved ISL modules implemented:
 
@@ -15,10 +15,10 @@ This is a banking-style transaction simulation, not a payment system or a claim 
 
 Double-click **Launch SecureLink.cmd** to open the application in your browser, without a terminal window. On a fresh clone, first double-click **Setup SecureLink.cmd** to install dependencies. Python must already be installed.
 
-The GUI includes a transfer workspace, device connection view, text composer, file picker and drag-and-drop, acknowledged chunk progress, persistent transfer history, resumable uploads, verified receiving, image/text previews, playable audio/video, audit verification, and PCAP-to-SQLite/XML exports. All transfers use the existing authenticated AES-GCM backend; no security results are mocked.
+The GUI includes a transfer workspace, device connection view, text composer, file picker and drag-and-drop, acknowledged chunk progress, persistent transfer history, resumable uploads, verified receiving, image/text previews, playable audio, audit verification, and PCAP-to-SQLite/XML exports. All transfers use the existing authenticated AES-GCM backend; no security results are mocked.
 
 1. Click **Start local demo**. The GUI starts the server and audit witness as separate hidden processes, on automatically selected ports, and authenticates the client.
-2. Send your own file/text, or use the four sample buttons. Supported formats are TXT, PNG/JPG, WAV/MP3 and MP4, up to 32 MiB.
+2. Send your own file/text, or use the three sample buttons. Supported formats are TXT, PNG/JPG and WAV/MP3, up to 32 MiB.
 3. Choose **Receive** to retrieve the server's copy through the encrypted channel and verify its SHA-256. Then use **Preview** or **Save**.
 4. Open **Security & audit**, click **Verify audit chain**, and show the witness checkpoint and recorded events.
 5. Open **Traffic analysis**, analyze the current captured stream, and export PCAP, SQLite, XML or JSON for the report.
@@ -27,7 +27,11 @@ The GUI includes a transfer workspace, device connection view, text composer, fi
 
 The GUI provisions its own random keys under excluded `runtime/gui/credentials/` and retains transfers in `runtime/gui/`. It does not overwrite CLI keys or existing CLI state. Restarting the local demo retains its server transfers and history. If a transfer fails, **Resume** reuses its original request ID. The interface displays controls separately from verification results; an audit is marked verified only after its head and count match the live authenticated witness.
 
-**Crypto performance** displays measured encryption, decryption, SHA-256 file hashing, Ed25519 signing and signature verification times for each upload/receive, separately for client and server. It shows call counts, processed bytes, failures, file digest, public signing key and signature, and exports CSV/JSON. Times surround the actual library operations. Hash timing includes file reads; server measurements stop before encoding the final acknowledgement, and cover the last connection when retries occur. Unperformed operations show a dash rather than a fabricated zero.
+**Text & image crypto lab** covers the requested encryption demonstration and security parameters. Enter text or choose TXT/PNG/JPEG, inspect the original and complete ciphertext through a paged hex inspector, then choose **Decrypt & verify** to display recovered text or images. Export the complete ciphertext, signature context and report. It measures AES-256-GCM encryption/decryption time and speed, SHA-256 generation time, and Ed25519 signing/verification time. Text experiments graph real AES input-bit diffusion and key-bit sensitivity (a confusion demonstration), with bit, byte-character and hex-character avalanche percentages. The 50% bit and requested 100% character values are reference lines, not forced results. Three bounded SHA-256 searches illustrate pre-image, second pre-image and collision resistance without claiming to prove them. See [the GUI guide](docs/GUI.md) for definitions, scope and references.
+
+**Crypto performance** displays measured encryption, decryption, SHA-256 file hashing, Ed25519 signing and signature verification times for each upload/receive, separately for client and server. Encryption/decryption speed is processed plaintext bytes divided by measured crypto time, with its own graph and CSV column. It shows call counts, processed bytes, failures, file digest, public signing key and signature, and exports CSV/JSON. Times surround the actual library operations. Hash timing includes file reads; server measurements stop before encoding the final acknowledgement, and cover the last connection when retries occur. Unperformed operations show a dash rather than a fabricated zero.
+
+**Performance benchmarks** measures the algorithms used by SecureLink: AES-256-GCM encryption/decryption time and speed, SHA-256 hashing time, and Ed25519 signing/verification time. Choose controlled text sizes and 2–50 measured repetitions; inspect median/p95 graphs, individual observations and correctness checks. Timings cover in-memory cryptographic calls, with key generation and manifest preparation outside the measured signing calls. Saved benchmarks export as report JSON, raw CSV and PNG. Earlier algorithm/transfer comparison reports remain on disk but are excluded from this focused page. See [the GUI guide](docs/GUI.md) for measurement scope.
 
 GUI transfers use real **Ed25519 digital signatures**, distinct from handshake HMAC authentication. The signed manifest binds the file SHA-256, original filename/media/size, device and request ID. The receiver verifies against a pinned public key before accepting the transfer; receive also checks the signature and full-file hash. GUI signing keys are provisioned separately as `signing_private.json` and `signing_public.json`. Older unsigned GUI transfers can use **Sign & resend** with their original request ID to add a signature without duplicating a committed transaction.
 
@@ -52,7 +56,7 @@ GUI backend checks are included in `pytest tests`. Optional real-browser accepta
 .\.venv\Scripts\python tests/browser_smoke.py
 ```
 
-The browser check uses isolated local state and exercises all four media previews, real encrypted round trips, file-picker/text uploads, saved downloads, audit verification, exports and a 390-pixel viewport. Screenshots and its summary stay under excluded `runtime/browser_qa/`.
+The browser check uses isolated local state and exercises text, image and audio previews, real encrypted round trips, file-picker/text uploads, saved downloads, audit verification, exports and a 390-pixel viewport. Screenshots and its summary stay under excluded `runtime/browser_qa/`.
 
 ### Command-line evaluation tools
 
@@ -66,7 +70,7 @@ python -m venv .venv
 .\.venv\Scripts\python -m pytest tests -q
 ```
 
-The fixture generator creates and validates real PNG/JPEG, WAV/MP3 and H.264 MP4 files. It uses Pillow and the FFmpeg binary bundled in `imageio-ffmpeg`; it does not download personal data or contact a media service.
+The fixture generator creates and validates real PNG/JPEG and WAV/MP3 files. It uses Pillow and the FFmpeg binary bundled in `imageio-ffmpeg`; it does not download personal data or contact a media service.
 
 Run the full demonstration with isolated state and actual socket captures:
 
@@ -77,7 +81,7 @@ Run the full demonstration with isolated state and actual socket captures:
 .\.venv\Scripts\python attack_simulator.py
 ```
 
-Use a fresh output directory for each run. `run_demo.py` compares secured and explicitly unsecured lab transfers, decodes received media, tests recovery after a lost completion ACK, and produces PCAP/SQLite/XML evidence. `demo_two_processes.py` launches separate bank and witness processes, acts as a client process, transfers all four media categories both ways, verifies hashes and stops the child services on exit.
+Use a fresh output directory for each run. `run_demo.py` compares secured and explicitly unsecured lab transfers, decodes received media, tests recovery after a lost completion ACK, and produces PCAP/SQLite/XML evidence. `demo_two_processes.py` launches separate bank and witness processes, acts as a client process, transfers text, image and audio both ways, verifies hashes and stops the child services on exit.
 
 ## Run services manually
 
@@ -99,14 +103,13 @@ Start these commands in separate terminals, in order:
 .\.venv\Scripts\python client_terminal.py upload sample_data/fixtures/transaction.txt
 .\.venv\Scripts\python client_terminal.py upload sample_data/fixtures/identity.png
 .\.venv\Scripts\python client_terminal.py upload sample_data/fixtures/audio.wav
-.\.venv\Scripts\python client_terminal.py upload sample_data/fixtures/video.mp4
 ```
 
 Each upload prints its request ID before sending. Save it. Substitute that ID below:
 
 ```powershell
-.\.venv\Scripts\python client_terminal.py download REQUEST_ID runtime/downloaded/video.mp4
-.\.venv\Scripts\python client_terminal.py upload sample_data/fixtures/video.mp4 --request-id REQUEST_ID
+.\.venv\Scripts\python client_terminal.py download REQUEST_ID runtime/downloaded/audio.wav
+.\.venv\Scripts\python client_terminal.py upload sample_data/fixtures/audio.wav --request-id REQUEST_ID
 .\.venv\Scripts\python verify_audit.py
 ```
 
@@ -119,9 +122,9 @@ The automated evidence is a simulation on one Windows machine with separate TCP 
 1. Device A runs the client and audit witness. Device B runs the bank server.
 2. Provision locally and transfer only the needed credential file to each device through a secure channel. Keep witness storage inaccessible to the bank service account.
 3. On A: run `witness_server.py --host A_LAN_IP`. On B: run `bank_server.py --host B_LAN_IP --witness-host A_LAN_IP`.
-4. On A: run `client_terminal.py --host B_LAN_IP upload sample_data/fixtures/video.mp4` and repeat for the other media types.
+4. On A: run `client_terminal.py --host B_LAN_IP upload sample_data/fixtures/audio.wav` and repeat for text and image.
 5. Permit the configured TCP ports (9998 witness, 9999 bank) only between the lab endpoints on the private lab network. Record the OS, CPU, memory and network topology in your report.
-6. Verify received hashes, decode/play the received audio/video, capture the lab port traffic, and run controlled disconnect tests.
+6. Verify received hashes, decode/play the received audio, capture the lab port traffic, and run controlled disconnect tests.
 
 Device A's witness must be independently protected for the checkpoint threat model to hold. A same-user loopback witness demonstrates the algorithm but does not provide independent protection against host compromise.
 
@@ -138,7 +141,7 @@ Device A's witness must be independently protected for the checkpoint threat mod
 
 See [protocol and threat model](docs/PROTOCOL.md). PSK compromise does not preserve past confidentiality: **there is no forward secrecy**. Shared-secret authentication is not third-party non-repudiation. This custom protocol is an educational implementation; production deployment would require a standard reviewed transport such as TLS and a broader security assessment.
 
-Only UTF-8 TXT, PNG, JPEG, WAV, MP3 and MP4 are accepted. Filename syntax, extension/media mapping, file signatures, total length and full-file hash are checked. Signature checks are not antivirus scanning or full parsing. Fixtures and downloaded demonstration files are separately decoded for verification.
+Only UTF-8 TXT, PNG, JPEG, WAV and MP3 are accepted. Filename syntax, extension/media mapping, file signatures, total length and full-file hash are checked. Signature checks are not antivirus scanning or full parsing. Fixtures and downloaded demonstration files are separately decoded for verification.
 
 Files are read/written in 64 KiB chunks, capped at 32 MiB each. The server reserves at most 256 MiB across 1,024 transfers, including unfinished transfers. It allows 8 concurrent connections, 120 new connections per source IP per minute, 1,000 records per session per second, a 5-second handshake deadline and a 10-second per-record deadline. Lab benchmark helpers explicitly raise the connection-attempt limit to allow repeated local measurements. They do not weaken the normal CLI server.
 
@@ -152,7 +155,7 @@ Capture application streams without a driver:
 
 ```powershell
 .\.venv\Scripts\python capture_traffic.py --mode stream --listen-port 10000 --target-port 9999
-.\.venv\Scripts\python client_terminal.py --port 10000 upload sample_data/fixtures/video.mp4
+.\.venv\Scripts\python client_terminal.py --port 10000 upload sample_data/fixtures/audio.wav
 .\.venv\Scripts\python pcap_analyzer.py captures/session_stream.pcap --backend pyshark --output results/stream_analysis
 ```
 
@@ -194,7 +197,7 @@ Measurements include hashing, actual transfer, disk persistence and audit acknow
 
 ## Project layout
 
-`frontend/` contains the responsive browser UI; `app.py` and `securelink/gui.py` launch and operate the local graphical application. `securelink/protocol.py` implements authentication, session derivation and framing; `client.py` and `server.py` implement transfers; `storage.py` owns durable idempotency; `audit.py` implements logs/checkpoints; `service.py` provides bounded TCP workers; `capture.py` and `analysis.py` implement traffic evidence; `benchmarks.py` evaluates actual transfers. Root scripts also provide CLI evaluation tools. Tests are isolated in `tests/`.
+`frontend/` contains the responsive browser UI; `app.py` and `securelink/gui.py` launch and operate the local graphical application. `securelink/protocol.py` implements authentication, session derivation and framing; `client.py` and `server.py` implement transfers; `storage.py` owns durable idempotency; `audit.py` implements logs/checkpoints; `service.py` provides bounded TCP workers; `capture.py` and `analysis.py` implement traffic evidence; `benchmarks.py` provides the original CLI study, and `experiments.py` runs the GUI performance benchmarks. Root scripts also provide CLI evaluation tools. Tests are isolated in `tests/`.
 
 ## References
 

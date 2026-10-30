@@ -31,17 +31,14 @@ def generate(directory='sample_data/fixtures'):
         output.writeframes(b''.join(struct.pack('<h', int(8000*math.sin(2*math.pi*440*t/16000))) for t in range(32000)))
     ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
     subprocess.run([ffmpeg,'-hide_banner','-loglevel','error','-y','-i',str(root/'audio.wav'),str(root/'audio.mp3')],check=True)
-    subprocess.run([ffmpeg,'-hide_banner','-loglevel','error','-y','-f','lavfi','-i',
-                    'testsrc2=size=640x360:rate=24','-t','3','-c:v','libx264','-pix_fmt','yuv420p',
-                    '-movflags','+faststart',str(root/'video.mp4')],check=True)
     records = []
     for path in sorted(root.iterdir()):
-        if path.suffix == '.json':
+        if path.suffix not in ('.txt','.png','.jpg','.jpeg','.wav','.mp3'):
             continue
         if path.suffix in ('.png','.jpg'):
             with Image.open(path) as check:
                 check.verify()
-        elif path.suffix in ('.wav','.mp3','.mp4'):
+        elif path.suffix in ('.wav','.mp3'):
             subprocess.run([ffmpeg,'-hide_banner','-loglevel','error','-xerror','-i',str(path),'-f','null','-'],check=True)
         records.append({'name':path.name,'size':path.stat().st_size,'sha256':file_hash(path),'validated':True})
     (root/'manifest.json').write_text(json.dumps(records,indent=2),encoding='utf-8')

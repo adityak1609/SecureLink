@@ -102,7 +102,7 @@ def test_absolute_deadline():
     finally:
         a.close();b.close()
 
-@pytest.mark.parametrize('name',['transaction.txt','identity.png','identity.jpg','audio.wav','audio.mp3','video.mp4'])
+@pytest.mark.parametrize('name',['transaction.txt','identity.png','identity.jpg','audio.wav','audio.mp3'])
 def test_real_media_roundtrip(lab,tmp_path,name):
     source=Path('sample_data/fixtures')/name
     assert source.exists(),'Run generate_samples.py before tests'
@@ -110,6 +110,14 @@ def test_real_media_roundtrip(lab,tmp_path,name):
         result=c.upload(source)
         target=c.download(result['request'],tmp_path/name)
         assert file_hash(source)==file_hash(target)
+
+
+def test_video_upload_is_not_supported(lab,tmp_path):
+    source=tmp_path/'video.mp4'
+    source.write_bytes(b'\0\0\0\x18ftypisom')
+    with client(lab) as c:
+        with pytest.raises(ProtocolError,match='Unsupported media format'):
+            c.upload(source)
 
 @pytest.mark.parametrize('failure',['chunk','finish'])
 def test_lost_ack_recovery_and_idempotency(lab,tmp_path,failure):

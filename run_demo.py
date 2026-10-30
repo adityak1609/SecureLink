@@ -27,14 +27,14 @@ def run(output):
             with StreamCapture(server.address,root/'session_stream.pcap',attempts_per_minute=100000) as observer:
                 transfers=[]
                 with Client(observer.address,'terminal-1',key,plaintext_lab=plain) as client:
-                    for filename in ('transaction.txt','identity.png','audio.wav','video.mp4'):
+                    for filename in ('transaction.txt','identity.png','audio.wav'):
                         source=fixtures/filename
                         result=client.upload(source)
                         received=client.download(result['request'],root/'downloads'/filename)
                         assert file_hash(source)==file_hash(received)
                         if received.suffix=='.png':
                             with Image.open(received) as image:image.verify()
-                        elif received.suffix in ('.wav','.mp4'):
+                        elif received.suffix=='.wav':
                             subprocess.run([imageio_ffmpeg.get_ffmpeg_exe(),'-v','error','-xerror','-i',str(received),'-f','null','-'],check=True)
                         transfers.append({'file':filename,'request':result['request'],'bytes':result['metadata']['size'],
                                           'sha256':result['metadata']['sha256'],'roundtrip_verified':True,'decoded':True})

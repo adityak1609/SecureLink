@@ -34,7 +34,7 @@ def run(output,iterations=30):
     fixtures=Path('sample_data/fixtures')
     with ExitStack() as stack:
         labs={mode:stack.enter_context(local_lab(output/mode,plaintext=mode=='plaintext')) for mode in ('secure','plaintext')}
-        for name in ('transaction.txt','identity.png','audio.wav','video.mp4'):
+        for name in ('transaction.txt','identity.png','audio.wav'):
             source=fixtures/name
             for iteration in range(-1,iterations):
                 # Alternate execution order to reduce systematic ordering bias.

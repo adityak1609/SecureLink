@@ -31,6 +31,8 @@ from .credentials import load, provision, provision_signatures
 from .settings import ROOT, MAX_FILE, EXTENSIONS
 from .storage import metadata_for, validate_metadata, validate_content
 from .image_metrics import image_metrics
+from . import experiments, crypto_lab
+from .metrics import operation_rate
 
 
 def now():
@@ -59,6 +61,7 @@ class Application:
         self.closed = False
         self.test_result=None
         self.test_xml=None
+        self.benchmark_cancel=threading.Event()
         self.history_path = self.root / 'history.json'
         self.history = json.loads(self.history_path.read_text()) if self.history_path.exists() else []
         # Provision isolated GUI keys once; existing CLI credentials are unaffected.
@@ -220,7 +223,7 @@ class Application:
         if not isinstance(name, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_. ()-]{0,119}', name) or name.endswith(('.', ' ')):
             raise ValueError('Use a filename starting with a letter or number and containing letters, numbers, spaces, dots, dashes, underscores or parentheses (up to 120 characters)')
         if Path(name).suffix.lower() not in EXTENSIONS:
-            raise ValueError('Supported formats: TXT, PNG, JPG, WAV, MP3 and MP4')
+            raise ValueError('Supported formats: TXT, PNG, JPG, WAV and MP3')
         return name
 
     def upload(self, source, job, request=None):
@@ -267,7 +270,8 @@ class Application:
 
     def record(self, request):
         with self.lock:
-            row = next((row for row in self.history if row['request'] == request and row['endpoint'] == self.endpoint()), None)
+            row = next((row for row in self.history if row['request'] == request and row['endpoint'] == self.endpoint()
+                        and row.get('media') == EXTENSIONS.get(Path(row.get('name', '')).suffix.lower())), None)
             if row is None:
                 raise ValueError('Transfer not found for the selected server')
             return row
@@ -344,7 +348,7 @@ class Application:
         return self.upload(source, job, request=request)
 
     def sample(self, name, job):
-        allowed = {'transaction.txt', 'identity.png', 'audio.wav', 'audio.mp3', 'video.mp4'}
+        allowed = {'transaction.txt', 'identity.png', 'audio.wav', 'audio.mp3'}
         if name not in allowed:
             raise ValueError('Unknown sample')
         self.check_outbox((ROOT / 'sample_data' / 'fixtures' / name).stat().st_size)
@@ -426,25 +430,108 @@ class Application:
             self.test_xml=xml
         return {'message':f"Tests finished: {result['passed']} passed, {result['failed']} failed, {result['skipped']} skipped"}
 
+    def benchmark_runs(self):
+        folder=self.root/'benchmarks'
+        if not folder.exists():
+            return []
+        runs=[]
+        for path in sorted(folder.glob('*/report.json'),key=lambda item:item.stat().st_mtime,reverse=True):
+            if not re.fullmatch('[0-9a-f]{16}',path.parent.name):
+                continue
+            try:
+                report=json.loads(path.read_text(encoding='utf-8'))
+                # Earlier comparison reports remain on disk, outside this focused view.
+                if report.get('schema_version') != 2:
+                    continue
+                experiments.validate(report['config'])
+                runs.append({'id':path.parent.name,'config':report['config'],
+                             'finished_at':report['finished_at'],
+                             'observations':report['observations'],
+                             'origin':report.get('origin','Local experiment'),
+                             'checks':sum(item['passed'] for item in report['checks'])})
+                if len(runs) == 30:
+                    break
+            except (OSError,ValueError,KeyError):
+                continue
+        return runs
+
+    def lab_runs(self):
+        runs = []
+        for path in sorted((self.root/'crypto_lab').glob('*/report.json'),
+                           key=lambda item: item.stat().st_mtime, reverse=True):
+            try:
+                report = json.loads(path.read_text(encoding='utf-8'))
+                runs.append({'id': path.parent.name, 'name': report['metadata']['name'],
+                             'media': report['metadata']['media'], 'created': report['created'],
+                             'decrypted': report['decrypted'], 'decrypted_at': report.get('decrypted_at')})
+            except (OSError, ValueError, KeyError):
+                continue
+        return runs
+
+    def lab_directory(self, run_id):
+        if not isinstance(run_id, str) or not re.fullmatch('[0-9a-f]{32}', run_id):
+            raise ValueError('Invalid encryption demonstration identifier')
+        folder = self.root/'crypto_lab'/run_id
+        if not (folder/'report.json').is_file():
+            raise ValueError('Encryption demonstration not found')
+        return folder
+
+    def lab_encrypt(self, source, job):
+        report = crypto_lab.encrypt(source.parent.parent, source.name, self.signing_key, self.config['device'])
+        return {'run_id': report['id'], 'message': 'Encrypted and signed; ready to inspect and decrypt'}
+
+    def lab_decrypt(self, run_id, job):
+        with self.lock:
+            report = crypto_lab.decrypt(self.lab_directory(run_id), self.signing_key)
+        return {'run_id': report['id'], 'message': 'Decrypted; signature and SHA-256 verified'}
+
+    def benchmark_directory(self,run_id):
+        if not re.fullmatch('[0-9a-f]{16}',run_id):
+            raise ValueError('Invalid experiment identifier')
+        directory=self.root/'benchmarks'/run_id
+        if not (directory/'report.json').is_file():
+            raise ValueError('Experiment not found')
+        return directory
+
+    def run_benchmark(self,job,config):
+        run_id=secrets.token_hex(8)
+        directory=self.root/'benchmarks'/run_id
+        directory.parent.mkdir(parents=True,exist_ok=True)
+        job.update(benchmark_done=0,benchmark_total=experiments.expected_cases(config),benchmark_step='Preparing inputs')
+        def progress(done,total,step):
+            with self.lock:
+                job.update(benchmark_done=done,benchmark_total=total,benchmark_step=step)
+        try:
+            report=experiments.run(directory,config,progress,self.benchmark_cancel)
+        except experiments.Cancelled:
+            shutil.rmtree(directory,ignore_errors=True)
+            return {'message':'Experiment cancelled; no incomplete result was saved','cancelled':True}
+        except Exception:
+            shutil.rmtree(directory,ignore_errors=True)
+            raise
+        return {'message':f'Experiment complete: {report["observations"]} measured observations',
+                'run_id':run_id}
+
     def metrics_export(self,format):
         records=self.state()['transfers']
         if format=='json':
             return json.dumps(records,indent=2).encode()
         stream=io.StringIO(newline='')
         writer=csv.writer(stream)
-        writer.writerow(['request','file','media','file_bytes','direction','endpoint','operation','calls','milliseconds','bytes_processed','failures'])
+        writer.writerow(['request','file','media','file_bytes','direction','endpoint','operation','calls','milliseconds','bytes_processed','failures','throughput_mib_s'])
         for record in records:
             for direction,metrics in record.get('crypto',{}).items():
                 for endpoint in ('client','server'):
                     for operation,value in metrics[endpoint].items():
                         writer.writerow([record['request'],record['name'],record['media'],record['size'],direction,endpoint,
-                                         operation,value['calls'],value['milliseconds'],value['bytes'],value['failures']])
+                                         operation,value['calls'],value['milliseconds'],value['bytes'],value['failures'],operation_rate(operation,value)])
         return stream.getvalue().encode('utf-8')
 
     def state(self):
         with self.lock:
             live = self.mode == 'remote' or (self.mode == 'local' and all(p.poll() is None for p in self.processes))
-            rows = [dict(row) for row in self.history if row['endpoint'] == self.endpoint()]
+            rows = [dict(row) for row in self.history if row['endpoint'] == self.endpoint()
+                    and row.get('media') == EXTENSIONS.get(Path(row.get('name', '')).suffix.lower())]
             for row in rows:
                 row.pop('source', None)
             events = []
@@ -462,7 +549,10 @@ class Application:
                     'topology': {'client': os.getpid(), 'server': self.processes[1].pid if len(self.processes)>1 else None,
                                  'witness': self.processes[0].pid if self.processes else None},
                     'max_file': MAX_FILE, 'exports': list(self.exports),
-                    'tests':self.test_result,'test_requirements':REQUIREMENTS,'wireshark_available':bool(wireshark_path())}
+                    'tests':self.test_result,'test_requirements':REQUIREMENTS,
+                    'benchmarks':self.benchmark_runs(),
+                    'crypto_lab':self.lab_runs(),
+                    'wireshark_available':bool(wireshark_path())}
 
     def close(self):
         with self.lock:
@@ -505,6 +595,25 @@ class Handler(BaseHTTPRequestHandler):
         body = json.dumps(value).encode()
         self.headers_for(status, 'application/json', len(body))
         self.wfile.write(body)
+        if status >= 400 and self.command == 'POST':
+            # Closing a Windows socket with unread request bytes can discard the
+            # rejection response. Drain a bounded amount after sending it; a peer
+            # withholding its declared body must not delay rejection indefinitely.
+            self.wfile.flush()
+            self.close_connection = True
+            declared = self.headers.get('Content-Length', '')
+            remaining = max(0, int(declared)-getattr(self, 'body_read', 0)) if declared.isdigit() and len(declared)<=10 else 0
+            remaining = min(remaining, 65536)
+            deadline = time.monotonic()+.05
+            try:
+                while remaining and time.monotonic()<deadline:
+                    self.connection.settimeout(max(.001, deadline-time.monotonic()))
+                    chunk = self.rfile.read1(min(remaining, 16384))
+                    if not chunk:
+                        break
+                    remaining -= len(chunk)
+            except OSError:
+                pass
 
     def file(self, path, attachment=False):
         if not path.is_file():
@@ -529,7 +638,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         parsed = urlsplit(self.path)
-        assets = {'/': 'index.html', '/app.js': 'app.js', '/style.css': 'style.css'}
+        assets = {'/': 'index.html', '/app.js': 'app.js', '/style.css': 'style.css',
+                  '/crypto-lab.js':'crypto-lab.js','/crypto-lab.css':'crypto-lab.css',
+                  '/benchmarks.js':'benchmarks.js','/benchmarks.css':'benchmarks.css'}
         try:
             if parsed.path in assets:
                 self.file(ROOT / 'frontend' / assets[parsed.path])
@@ -539,6 +650,52 @@ class Handler(BaseHTTPRequestHandler):
             app = self.server.app
             if parsed.path == '/api/state':
                 self.respond(app.state())
+            elif parsed.path.startswith('/api/lab/'):
+                parts = parsed.path.strip('/').split('/')
+                if len(parts) not in (3, 4):
+                    raise ValueError('Unknown encryption demonstration route')
+                folder = app.lab_directory(parts[2])
+                with app.lock:
+                    report = json.loads((folder/'report.json').read_text(encoding='utf-8'))
+                if len(parts) == 3 or parts[3] == 'report':
+                    body = json.dumps(report, indent=2).encode('utf-8')
+                    self.headers_for(200, 'application/json', len(body), 'report.json' if len(parts)==4 else None)
+                    self.wfile.write(body)
+                elif parts[3] == 'ciphertext':
+                    self.file(folder/'ciphertext.bin', attachment=True)
+                elif parts[3] == 'signature':
+                    self.file(folder/'signature.json', attachment=True)
+                elif parts[3] == 'hex':
+                    offset = int(parse_qs(parsed.query).get('offset', ['0'])[0])
+                    total = report['ciphertext_bytes']
+                    if not 0 <= offset < total:
+                        raise ValueError('Ciphertext offset is outside the file')
+                    with (folder/'ciphertext.bin').open('rb') as stream:
+                        stream.seek(offset)
+                        chunk = stream.read(min(4096, total-offset))
+                    self.respond({'offset': offset, 'length': len(chunk), 'total': total,
+                                  'hex': chunk.hex(), 'next_offset': offset+len(chunk) if offset+len(chunk)<total else None})
+                elif parts[3] in ('source', 'recovered'):
+                    if parts[3] == 'recovered' and not report['decrypted']:
+                        raise ValueError('Decrypt and verify the file first')
+                    self.file(folder/parts[3]/report['metadata']['name'], attachment=True)
+                else:
+                    raise ValueError('Unknown encryption demonstration export')
+            elif parsed.path.startswith('/api/benchmarks/'):
+                parts=parsed.path.strip('/').split('/')
+                if len(parts) not in (3,4,5):
+                    raise ValueError('Unknown experiment route')
+                directory=app.benchmark_directory(parts[2])
+                if len(parts)==3:
+                    self.file(directory/'report.json')
+                elif len(parts)==4 and parts[3]=='observations':
+                    with (directory/'observations.csv').open(newline='',encoding='utf-8') as stream:
+                        self.respond(list(csv.DictReader(stream)))
+                elif len(parts)==5 and parts[3]=='export' and parts[4] in ('json','csv','png'):
+                    name={'json':'report.json','csv':'observations.csv','png':'comparison.png'}[parts[4]]
+                    self.file(directory/name,attachment=True)
+                else:
+                    raise ValueError('Unknown experiment export')
             elif parsed.path in ('/api/metrics/csv','/api/metrics/json'):
                 format=parsed.path.rsplit('/',1)[-1]
                 body=app.metrics_export(format)
@@ -593,24 +750,35 @@ class Handler(BaseHTTPRequestHandler):
         return int(value)
 
     def do_POST(self):
+        self.body_read = 0
         if not self.authorized():
             return
         parsed = urlsplit(self.path)
         app = self.server.app
         try:
-            if parsed.path == '/api/upload':
+            if parsed.path in ('/api/upload', '/api/lab/encrypt'):
+                lab_upload = parsed.path == '/api/lab/encrypt'
                 if not self.server.upload_slots.acquire(blocking=False):
                     raise ValueError('Too many browser uploads; please wait')
                 try:
                     name = app.safe_name(parse_qs(parsed.query).get('name', [''])[0])
+                    if lab_upload and Path(name).suffix.lower() not in ('.txt', '.png', '.jpg', '.jpeg'):
+                        raise ValueError('Choose UTF-8 text, PNG or JPEG')
                     size = self.length(MAX_FILE)
                     with app.lock:
-                        if not app.connected:
+                        if not lab_upload and not app.connected:
                             raise ValueError('Connect a device first')
                         if any(j['status'] in ('running', 'queued') for j in app.jobs):
                             raise ValueError('Please wait for the current operation')
-                        app.check_outbox(size)
-                    folder = app.root / 'outbox' / secrets.token_hex(16)
+                        if lab_upload:
+                            root = app.root/'crypto_lab'
+                            # Reserve space for source, ciphertext, recovered copy and reports.
+                            used = sum(path.stat().st_size for path in root.rglob('*') if path.is_file())
+                            if len(list(root.glob('*'))) >= 64 or used+3*size+1024*1024 > 256*1024*1024:
+                                raise ValueError('Local encryption demonstrations reached their storage limit')
+                        else:
+                            app.check_outbox(size)
+                    folder = (app.root/'crypto_lab'/secrets.token_hex(16)/'source') if lab_upload else app.root / 'outbox' / secrets.token_hex(16)
                     folder.mkdir(parents=True)
                     source = folder / name
                     remaining = size
@@ -620,13 +788,16 @@ class Handler(BaseHTTPRequestHandler):
                             if not block:
                                 raise ValueError('Browser upload interrupted')
                             output.write(block)
+                            self.body_read += len(block)
                             remaining -= len(block)
-                    self.respond(app.submit('Send ' + name, lambda job: app.upload(source, job)), 202)
+                    self.respond(app.submit(('Encrypt ' if lab_upload else 'Send ') + name,
+                                            lambda job: app.lab_encrypt(source, job) if lab_upload else app.upload(source, job)), 202)
                 finally:
                     self.server.upload_slots.release()
                 return
             size = self.length(2 * 1024 * 1024)
             raw = self.rfile.read(size)
+            self.body_read = len(raw)
             if len(raw) != size:
                 raise ValueError('Request interrupted')
             values = json.loads(raw)
@@ -634,6 +805,19 @@ class Handler(BaseHTTPRequestHandler):
                 raise ValueError('Expected a JSON object')
             if parsed.path == '/api/demo/start':
                 result = app.submit('Start local devices', app.start_demo)
+            elif parsed.path == '/api/lab/decrypt':
+                result = app.submit('Decrypt and verify', lambda job: app.lab_decrypt(values.get('id'), job))
+            elif parsed.path == '/api/benchmarks/run':
+                config=experiments.validate(values)
+                app.benchmark_cancel.clear()
+                result=app.submit('Run performance benchmark',lambda job:app.run_benchmark(job,config))
+            elif parsed.path == '/api/benchmarks/cancel':
+                with app.lock:
+                    if not any(j['label']=='Run performance benchmark' and j['status'] in ('queued','running') for j in app.jobs):
+                        raise ValueError('No experiment is running')
+                    app.benchmark_cancel.set()
+                self.respond({'message':'Stopping after the current trial'},202)
+                return
             elif parsed.path == '/api/connect':
                 result = app.submit('Authenticate device', lambda job: app.connect_remote(values, job))
             elif parsed.path == '/api/disconnect':

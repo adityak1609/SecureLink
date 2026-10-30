@@ -16,6 +16,11 @@ def test_pcap_conversion_counts_and_cross_record_marker(tmp_path):
     assert result['records']==2 and result['marker_found']
     assert result['retransmissions'] is None
     assert result['backend']=='pyshark' and result['engine']=='PyShark + Wireshark/TShark'
+    assert len(result['timeline'])==12
+    assert sum(bin['records'] for bin in result['timeline'])==result['records']
+    assert sum(bin['payload_bytes'] for bin in result['timeline'])==result['payload_bytes']
+    assert result['direction_summary']==[{'source':'client','destination':'server','records':2,
+                                           'payload_bytes':12}]
     with sqlite3.connect(tmp_path/'out/packets.sqlite') as db:
         assert db.execute('SELECT count(*) FROM packets').fetchone()[0]==2
     assert len(ET.parse(tmp_path/'out/packets.xml').getroot())==2

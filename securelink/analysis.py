@@ -87,7 +87,7 @@ def analyze(path,output,backend='pyshark',marker=b'"amount_paise"'):
              'pyshark_version':version('pyshark'),'records':0,'captured_bytes':0,'payload_bytes':0,
              'marker_found':False,'retransmissions':None,'capture_kind':None,
              'interpretation':'Entropy is descriptive, not proof of encryption. USER0 captures contain socket bytes, not TCP packets.'}
-    tails={};first=None;last=None;weighted_entropy=0
+    tails={};first=None;last=None;weighted_entropy=0;directions={}
     with closing(sqlite3.connect(db_path)) as db, db:
         db.execute('DROP TABLE IF EXISTS packets')
         db.execute('CREATE TABLE packets (number INTEGER PRIMARY KEY, timestamp REAL, length INTEGER, connection INTEGER, source TEXT, destination TEXT, payload_size INTEGER, entropy REAL, retransmission INTEGER, payload_hex TEXT)')
@@ -112,13 +112,28 @@ def analyze(path,output,backend='pyshark',marker=b'"amount_paise"'):
                 ET.SubElement(element,name).text='' if item is None else str(item)
             summary['records']+=1;summary['captured_bytes']+=record['length'];summary['payload_bytes']+=len(data)
             weighted_entropy+=value*len(data)
+            direction=(record['source'],record['destination'])
+            direction_total=directions.setdefault(direction,{'source':direction[0],'destination':direction[1],
+                                                           'records':0,'payload_bytes':0})
+            direction_total['records']+=1
+            direction_total['payload_bytes']+=len(data)
             if summary['retransmissions'] is not None:summary['retransmissions']+=int(record['retransmission'])
             first=record['timestamp'] if first is None else min(first,record['timestamp'])
             last=record['timestamp'] if last is None else max(last,record['timestamp'])
         if summary['records']==0:raise ValueError('Empty capture')
         assert db.execute('SELECT count(*) FROM packets').fetchone()[0]==summary['records']
+        # Fixed-size bins keep the GUI response small even for long captures.
+        span=max(last-first,0)
+        timeline=[{'start_seconds':span*i/12,'end_seconds':span*(i+1)/12,
+                   'records':0,'payload_bytes':0} for i in range(12)]
+        for timestamp,payload_size in db.execute('SELECT timestamp,payload_size FROM packets'):
+            index=min(11,int((timestamp-first)/span*12)) if span else 0
+            timeline[index]['records']+=1
+            timeline[index]['payload_bytes']+=payload_size
     summary['duration_seconds']=last-first
     summary['weighted_record_entropy']=weighted_entropy/max(summary['payload_bytes'],1)
+    summary['direction_summary']=sorted(directions.values(),key=lambda row:(-row['payload_bytes'],row['source'],row['destination']))
+    summary['timeline']=timeline
     ET.indent(xml_root)
     ET.ElementTree(xml_root).write(output/'packets.xml',encoding='utf-8',xml_declaration=True)
     assert len(ET.parse(output/'packets.xml').getroot())==summary['records']

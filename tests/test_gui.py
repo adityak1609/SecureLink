@@ -78,7 +78,7 @@ def test_gui_http_boundary_and_no_credential_disclosure(gui):
 
 
 def test_gui_rejects_unsafe_uploads_before_reading_body(gui):
-    for name in ('../secret.txt', 'malware.exe', 'folder\\note (1).txt', 'note:1.txt', 'note\r\n.txt', 'a' * 117 + '.txt'):
+    for name in ('../secret.txt', 'malware.exe', 'video.mp4', 'folder\\note (1).txt', 'note:1.txt', 'note\r\n.txt', 'a' * 117 + '.txt'):
         # Withhold the declared body to prove validation happens before reading it.
         assert http(gui, 'POST', '/api/upload?name=' + quote(name, safe=''),
                     headers={'Content-Length': '1'})[0] == 400
@@ -86,12 +86,23 @@ def test_gui_rejects_unsafe_uploads_before_reading_body(gui):
     assert http(gui, 'POST', '/api/upload?name=note.txt', b'')[0] == 400
 
 
+def test_legacy_video_history_is_hidden_without_deleting_it(gui):
+    app, _ = gui
+    request = 'f' * 32
+    app.history.append({'request': request, 'name': 'video.mp4', 'media': 'video',
+                        'endpoint': app.endpoint()})
+    assert all(row['request'] != request for row in app.state()['transfers'])
+    with pytest.raises(ValueError, match='Transfer not found'):
+        app.record(request)
+    assert app.history[-1]['request'] == request
+
+
 def test_gui_real_multimedia_roundtrips_audit_exports_and_restart(gui):
     app, _ = gui
     start(gui)
     topology = app.state()['topology']
     assert len(set(topology.values())) == 3
-    for name in ('transaction.txt', 'identity.png', 'audio.wav', 'video.mp4'):
+    for name in ('transaction.txt', 'identity.png', 'audio.wav'):
         sent = job(gui, '/api/sample', {'name': name})
         assert sent['status'] == 'complete', sent
         assert sent['done'] == sent['total'] > 0
@@ -135,11 +146,11 @@ def test_gui_real_multimedia_roundtrips_audit_exports_and_restart(gui):
     status,csv=http(gui,'GET','/api/metrics/csv')
     assert status==200 and b'signature_verification' in csv and b'encryption' in csv
     assert app.signing_key.hex().encode() not in http(gui,'GET','/api/metrics/json')[1]
-    assert len(app.history) == 4
+    assert len(app.history) == 3
     status,log_data=http(gui,'GET','/api/logs/audit.jsonl')
     assert status==200 and b'transfer_complete' in log_data
     start(gui)  # Retained transfers belong to the logical demo, not an ephemeral port.
-    assert len(app.state()['transfers']) == 4
+    assert len(app.state()['transfers']) == 3
     received = job(gui, '/api/download', {'request': app.history[0]['request']})
     assert received['status'] == 'complete'
     source = app.root / app.history[0]['source']

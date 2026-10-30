@@ -14,4 +14,4 @@ HANDSHAKE_CLOCK_SKEW = 60
 MAX_CONNECTIONS = 8
 MAX_ATTEMPTS_PER_MINUTE = 120
 EXTENSIONS = {'.txt': 'text', '.png': 'image', '.jpg': 'image', '.jpeg': 'image',
-              '.wav': 'audio', '.mp3': 'audio', '.mp4': 'video'}
+              '.wav': 'audio', '.mp3': 'audio'}

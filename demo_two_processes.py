@@ -51,7 +51,7 @@ def run(directory):
                  'bank_address':bank_address,'witness_address':witness_address,'transfers':[]}
         with StreamCapture(bank_address,root/'session_stream.pcap') as capture:
             with Client(capture.address,config['device'],bytes.fromhex(config['secret'])) as client:
-                for name in ('transaction.txt','identity.png','audio.wav','video.mp4'):
+                for name in ('transaction.txt','identity.png','audio.wav'):
                     source=Path('sample_data/fixtures')/name
                     uploaded=client.upload(source)
                     downloaded=client.download(uploaded['request'],root/'downloads'/name)
